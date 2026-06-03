@@ -3,6 +3,7 @@ package com.defensacivil.controller;
 import com.defensacivil.config.DatabaseConfig;
 import com.google.gson.Gson;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
@@ -40,8 +41,11 @@ import java.util.concurrent.ConcurrentHashMap;
     "/api/kinships/*",
     "/api/bloodGroups/*",
     "/api/vulnerableTest/*",
-    "/api/animalGenders/*"
+    "/api/animalGenders/*",
+    "/api/availableResources/*",
+    "/storage/*"
 })
+@MultipartConfig
 public class PlanDetailsServlet extends HttpServlet {
 
     private final Gson gson = new Gson();
@@ -60,11 +64,41 @@ public class PlanDetailsServlet extends HttpServlet {
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        resp.setContentType("application/json");
-        resp.setCharacterEncoding("UTF-8");
-
         String servletPath = req.getServletPath();
         String pathInfo = req.getPathInfo();
+
+        if (servletPath != null && servletPath.contains("storage")) {
+            String requestedFile = pathInfo != null ? pathInfo.substring(1) : "";
+            if (requestedFile.isEmpty() && servletPath.length() > 9) {
+                requestedFile = servletPath.substring(9);
+            }
+            java.io.File file = new java.io.File("/home/dylan/Documents/projects/df/DefensaCivilAPI/storage", requestedFile);
+            if (!file.exists() || file.isDirectory()) {
+                // Fallback to default mock image
+                file = new java.io.File("/home/dylan/Documents/projects/df/UIDefensaCivil_Modificado/public/familia.png");
+            }
+            if (file.exists()) {
+                String mimeType = getServletContext().getMimeType(file.getName());
+                if (mimeType == null) {
+                    mimeType = "image/png";
+                }
+                resp.setContentType(mimeType);
+                try (java.io.FileInputStream in = new java.io.FileInputStream(file);
+                     java.io.OutputStream out = resp.getOutputStream()) {
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+                    while ((bytesRead = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, bytesRead);
+                    }
+                }
+            } else {
+                resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            }
+            return;
+        }
+
+        resp.setContentType("application/json");
+        resp.setCharacterEncoding("UTF-8");
 
         try {
             // MOCKS/CATALOGS
@@ -939,18 +973,94 @@ public class PlanDetailsServlet extends HttpServlet {
                 }
             }
 
-            // HOUSING INFO (GraficoVivienda with EsEntorno = 1)
+            // GET /api/availableResources
+            if (servletPath.contains("availableResources")) {
+                if (pathInfo != null && pathInfo.startsWith("/familyPlan/")) {
+                    int planId = Integer.parseInt(pathInfo.substring(12));
+                    List<Map<String, Object>> list = new ArrayList<>();
+                    String sql = """
+                        SELECT rd.IdRecurso, rd.Ubicacion, rd.Distancia, rd.Telefono, rt.Nombre AS RecursoNombre, s.Nombre AS ServicioNombre
+                        FROM RecursoDisponible rd
+                        JOIN RecursoTipo rt ON rd.IdRecursoTipo = rt.IdRecursoTipo
+                        JOIN Servicio s ON rd.IdServicio = s.IdServicio
+                        WHERE rd.IdPlanFamiliar = ?
+                        """;
+                    try (Connection conn = DatabaseConfig.getConnection();
+                         PreparedStatement ps = conn.prepareStatement(sql)) {
+                        ps.setInt(1, planId);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            while (rs.next()) {
+                                Map<String, Object> item = new HashMap<>();
+                                int resourceId = rs.getInt("IdRecurso");
+                                item.put("id", resourceId);
+                                item.put("resource_name", rs.getString("RecursoNombre"));
+                                item.put("location", rs.getString("Ubicacion") != null ? rs.getString("Ubicacion") : "");
+                                item.put("distance", rs.getFloat("Distancia"));
+                                item.put("service", rs.getString("ServicioNombre") != null ? rs.getString("ServicioNombre") : "");
+                                
+                                // Load description from extraData
+                                Map<String, Object> extra = extraData.getOrDefault("resource_" + resourceId, Map.of());
+                                item.put("description", extra.getOrDefault("description", ""));
+                                item.put("phone", rs.getString("Telefono") != null ? rs.getString("Telefono") : "");
+                                list.add(item);
+                            }
+                        }
+                    }
+                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
+                    return;
+                } else if (pathInfo != null && !pathInfo.equals("/")) {
+                    int idVal = Integer.parseInt(pathInfo.substring(1));
+                    Map<String, Object> item = new HashMap<>();
+                    String sql = """
+                        SELECT rd.IdRecurso, rd.IdRecursoTipo, rd.IdServicio, rd.Ubicacion, rd.Distancia, rd.Telefono, rt.Nombre AS RecursoNombre
+                        FROM RecursoDisponible rd
+                        JOIN RecursoTipo rt ON rd.IdRecursoTipo = rt.IdRecursoTipo
+                        WHERE rd.IdRecurso = ?
+                        """;
+                    try (Connection conn = DatabaseConfig.getConnection();
+                         PreparedStatement ps = conn.prepareStatement(sql)) {
+                        ps.setInt(1, idVal);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) {
+                                item.put("id", rs.getInt("IdRecurso"));
+                                item.put("phone", rs.getString("Telefono") != null ? rs.getString("Telefono") : "");
+                                item.put("distance", rs.getFloat("Distancia"));
+                                item.put("location", rs.getString("Ubicacion") != null ? rs.getString("Ubicacion") : "");
+                                item.put("resource_id", rs.getInt("IdRecursoTipo"));
+                                item.put("resource_name", rs.getString("RecursoNombre"));
+                                
+                                Map<String, Object> extra = extraData.getOrDefault("resource_" + idVal, Map.of());
+                                item.put("description", extra.getOrDefault("description", ""));
+                            }
+                        }
+                    }
+                    resp.getWriter().write(gson.toJson(Map.of("data", item)));
+                    return;
+                }
+            }
+
+            // HOUSING INFO (GraficoVivienda with EsEntorno = 1 for type 2, or 0 for type 1)
             if (servletPath.contains("housingInfo")) {
                 if (pathInfo != null && !pathInfo.equals("/")) {
-                    // Path format: /housingInfo/{planId}/type/1
+                    // Path format: /housingInfo/{planId}/type/{typeId}
                     String[] segments = pathInfo.split("/");
                     int planId = Integer.parseInt(segments[1]);
+                    int typeId = 2; // Default: 2 (Entorno)
+                    if (segments.length > 3) {
+                        try {
+                            typeId = Integer.parseInt(segments[3]);
+                        } catch (NumberFormatException e) {
+                            // Ignored
+                        }
+                    }
+                    int esEntornoVal = (typeId == 2) ? 1 : 0;
 
-                    String sql = "SELECT IdGrafico, RutaImagen FROM GraficoVivienda WHERE IdPlanFamiliar = ? AND EsEntorno = 1 LIMIT 1";
+                    String sql = "SELECT IdGrafico, RutaImagen FROM GraficoVivienda WHERE IdPlanFamiliar = ? AND EsEntorno = ? LIMIT 1";
                     Map<String, Object> item = null;
                     try (Connection conn = DatabaseConfig.getConnection();
                          PreparedStatement ps = conn.prepareStatement(sql)) {
                         ps.setInt(1, planId);
+                        ps.setInt(2, esEntornoVal);
                         try (ResultSet rs = ps.executeQuery()) {
                             if (rs.next()) {
                                 item = new HashMap<>();
@@ -961,10 +1071,10 @@ public class PlanDetailsServlet extends HttpServlet {
                         }
                     }
                     if (item != null) {
-                        resp.getWriter().write(gson.toJson(item));
+                        resp.getWriter().write(gson.toJson(Map.of("data", item)));
                     } else {
                         resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                        resp.getWriter().write("{\"success\":false}");
+                        resp.getWriter().write("{\"success\":false,\"data\":null}");
                     }
                     return;
                 }
@@ -1136,11 +1246,34 @@ public class PlanDetailsServlet extends HttpServlet {
         String servletPath = req.getServletPath();
         String pathInfo = req.getPathInfo();
 
-        try {
-            BufferedReader reader = req.getReader();
-            Map<String, Object> body = gson.fromJson(reader, Map.class);
+        Map<String, Object> body = new HashMap<>();
+        String contentType = req.getContentType();
+        boolean isMultipart = contentType != null && contentType.toLowerCase().contains("multipart/form-data");
 
-            if (body == null) body = new HashMap<>();
+        try {
+            if (isMultipart) {
+                for (Map.Entry<String, String[]> entry : req.getParameterMap().entrySet()) {
+                    if (entry.getValue().length > 0) {
+                        body.put(entry.getKey(), entry.getValue()[0]);
+                    }
+                }
+                if (pathInfo != null && pathInfo.length() > 1) {
+                    String[] segments = pathInfo.split("/");
+                    if (segments.length > 1) {
+                        try {
+                            body.put("family_plan_id", Integer.parseInt(segments[1]));
+                        } catch (NumberFormatException e) {
+                            // Ignored
+                        }
+                    }
+                }
+            } else {
+                BufferedReader reader = req.getReader();
+                Map<String, Object> jsonBody = gson.fromJson(reader, Map.class);
+                if (jsonBody != null) {
+                    body.putAll(jsonBody);
+                }
+            }
 
             // POST /api/vulnerableTest
             if (servletPath.contains("vulnerableTest")) {
@@ -1490,20 +1623,87 @@ public class PlanDetailsServlet extends HttpServlet {
                 }
             }
 
+            // POST /api/availableResources
+            if (servletPath.contains("availableResources")) {
+                Object resourceIdObj = body.get("resource_id");
+                int resourceId = 1;
+                if (resourceIdObj instanceof Number) resourceId = ((Number) resourceIdObj).intValue();
+                else if (resourceIdObj instanceof String) resourceId = Integer.parseInt((String) resourceIdObj);
+
+                String description = (String) body.get("description");
+                String location = (String) body.get("location");
+                
+                Object distanceObj = body.get("distance");
+                float distance = 0.0f;
+                if (distanceObj instanceof Number) distance = ((Number) distanceObj).floatValue();
+                else if (distanceObj instanceof String && !((String) distanceObj).isEmpty()) distance = Float.parseFloat((String) distanceObj);
+
+                String phone = (String) body.get("phone");
+
+                Object planIdObj = body.get("family_plan_id");
+                int planId = 1;
+                if (planIdObj instanceof Number) planId = ((Number) planIdObj).intValue();
+                else if (planIdObj instanceof String) planId = Integer.parseInt((String) planIdObj);
+
+                // Fetch service ID associated with the resource
+                int serviceId = 1;
+                String serviceSql = "SELECT s.IdServicio FROM Servicio s WHERE s.Nombre = (SELECT r.Servicio FROM Recurso r WHERE r.IdRecurso = ?)";
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(serviceSql)) {
+                    ps.setInt(1, resourceId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (rs.next()) {
+                            serviceId = rs.getInt("IdServicio");
+                        }
+                    }
+                } catch (Exception e) {
+                    // Fallback to default service ID 1
+                }
+
+                String sql = "INSERT INTO RecursoDisponible (IdPlanFamiliar, IdRecursoTipo, IdServicio, Ubicacion, Distancia, Telefono) VALUES (?, ?, ?, ?, ?, ?)";
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                    ps.setInt(1, planId);
+                    ps.setInt(2, resourceId); // Using resourceId directly as IdRecursoTipo
+                    ps.setInt(3, serviceId);
+                    ps.setString(4, location != null ? location : "");
+                    ps.setFloat(5, distance);
+                    ps.setString(6, phone != null ? phone : "");
+                    ps.executeUpdate();
+
+                    int generatedId = 0;
+                    try (ResultSet rs = ps.getGeneratedKeys()) {
+                        if (rs.next()) generatedId = rs.getInt(1);
+                    }
+                    if (generatedId > 0) {
+                        Map<String, Object> extra = new HashMap<>();
+                        extra.put("description", description != null ? description : "");
+                        extraData.put("resource_" + generatedId, extra);
+                    }
+
+                    resp.setStatus(HttpServletResponse.SC_CREATED);
+                    resp.getWriter().write("{\"success\":true,\"message\":\"Recurso disponible agregado exitosamente\"}");
+                    return;
+                }
+            }
+
             // POST /api/vulnerabilityFactors
             if (servletPath.contains("vulnerabilityFactors")) {
                 Object vulnIdObj = body.get("vulnerability_id");
                 int vulnId = 1;
                 if (vulnIdObj instanceof Number) vulnId = ((Number) vulnIdObj).intValue();
+                else if (vulnIdObj instanceof String && !((String) vulnIdObj).isEmpty()) vulnId = Integer.parseInt((String) vulnIdObj);
 
                 Object gradeObj = body.get("vulnerability_grade_id");
                 int gradeId = 1;
                 if (gradeObj instanceof Number) gradeId = ((Number) gradeObj).intValue();
+                else if (gradeObj instanceof String && !((String) gradeObj).isEmpty()) gradeId = Integer.parseInt((String) gradeObj);
                 String gradeStr = (gradeId == 1) ? "Bajo" : (gradeId == 2 ? "Medio" : "Alto");
 
                 Object riskIdObj = body.get("risk_factor_id");
                 int riskId = 1;
                 if (riskIdObj instanceof Number) riskId = ((Number) riskIdObj).intValue();
+                else if (riskIdObj instanceof String && !((String) riskIdObj).isEmpty()) riskId = Integer.parseInt((String) riskIdObj);
 
                 String sql = "INSERT INTO Vulnerabilidad (IdFactorRiesgo, IdTipoVulnerabilidad, Grado) VALUES (?, ?, ?)";
                 try (Connection conn = DatabaseConfig.getConnection();
@@ -1523,6 +1723,7 @@ public class PlanDetailsServlet extends HttpServlet {
                 Object riskIdObj = body.get("risk_factor_id");
                 int riskId = 1;
                 if (riskIdObj instanceof Number) riskId = ((Number) riskIdObj).intValue();
+                else if (riskIdObj instanceof String && !((String) riskIdObj).isEmpty()) riskId = Integer.parseInt((String) riskIdObj);
 
                 int randId = (int) (Math.random() * 1000) + 1;
                 Map<String, Object> extra = new HashMap<>();
@@ -1540,21 +1741,96 @@ public class PlanDetailsServlet extends HttpServlet {
                 return;
             }
 
-            // POST /api/housingInfo and housingGraphics (Mulipart upload mock using simple paths)
+            // POST /api/housingInfo and housingGraphics (Multipart upload with real file persistence)
             if (servletPath.contains("housingInfo") || servletPath.contains("housingGraphics")) {
-                // Return dummy success since files are mock stored in assets
                 boolean esEntorno = servletPath.contains("housingInfo");
                 Object planIdObj = body.get("family_plan_id");
                 int planId = 1;
                 if (planIdObj instanceof Number) planId = ((Number) planIdObj).intValue();
                 else if (planIdObj instanceof String) planId = Integer.parseInt((String) planIdObj);
 
-                String sql = "INSERT INTO GraficoVivienda (IdPlanFamiliar, RutaImagen, Descripcion, EsEntorno) VALUES (?, 'mock_graphic.png', 'Grafico del plan', ?)";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setInt(1, planId);
-                    ps.setInt(2, esEntorno ? 1 : 0);
-                    ps.executeUpdate();
+                int typeId = esEntorno ? 2 : 1; // Default: 2 (Entorno) for housingInfo
+                Object typeIdObj = body.get("housing_info_type_id");
+                if (typeIdObj instanceof Number) typeId = ((Number) typeIdObj).intValue();
+                else if (typeIdObj instanceof String && !((String) typeIdObj).isEmpty()) typeId = Integer.parseInt((String) typeIdObj);
+
+                if (pathInfo != null && pathInfo.length() > 1) {
+                    String[] segments = pathInfo.split("/");
+                    if (segments.length > 3) {
+                        try {
+                            typeId = Integer.parseInt(segments[3]);
+                        } catch (NumberFormatException e) {
+                            // Ignored
+                        }
+                    }
+                }
+                int esEntornoVal = (typeId == 2) ? 1 : 0;
+
+                String description = body.containsKey("description") ? (String) body.get("description") : "Grafico del plan";
+
+                String savedFileName = "mock_graphic.png";
+                jakarta.servlet.http.Part filePart = null;
+                try {
+                    filePart = req.getPart("path");
+                } catch (Exception e) {
+                    // Ignored
+                }
+                if (filePart != null) {
+                    String fileName = filePart.getSubmittedFileName();
+                    if (fileName != null && !fileName.isEmpty()) {
+                        savedFileName = "upload_" + System.currentTimeMillis() + "_" + fileName;
+                        String storageDirPath = "/home/dylan/Documents/projects/df/DefensaCivilAPI/storage";
+                        java.io.File storageDir = new java.io.File(storageDirPath);
+                        if (!storageDir.exists()) {
+                            storageDir.mkdirs();
+                        }
+                        java.io.File fileToSave = new java.io.File(storageDir, savedFileName);
+                        try (java.io.InputStream input = filePart.getInputStream();
+                             java.io.OutputStream output = new java.io.FileOutputStream(fileToSave)) {
+                            byte[] buffer = new byte[4096];
+                            int bytesRead;
+                            while ((bytesRead = input.read(buffer)) != -1) {
+                                output.write(buffer, 0, bytesRead);
+                            }
+                        }
+                    }
+                }
+
+                try (Connection conn = DatabaseConfig.getConnection()) {
+                    boolean exists = false;
+                    // Only check exists if it's housingInfo (esEntorno is true)
+                    if (esEntorno) {
+                        String checkSql = "SELECT IdGrafico FROM GraficoVivienda WHERE IdPlanFamiliar = ? AND EsEntorno = ?";
+                        try (PreparedStatement checkPs = conn.prepareStatement(checkSql)) {
+                            checkPs.setInt(1, planId);
+                            checkPs.setInt(2, esEntornoVal);
+                            try (ResultSet rs = checkPs.executeQuery()) {
+                                if (rs.next()) {
+                                    exists = true;
+                                }
+                            }
+                        }
+                    }
+
+                    if (exists) {
+                        String updateSql = "UPDATE GraficoVivienda SET RutaImagen = ?, Descripcion = ? WHERE IdPlanFamiliar = ? AND EsEntorno = ?";
+                        try (PreparedStatement updatePs = conn.prepareStatement(updateSql)) {
+                            updatePs.setString(1, savedFileName);
+                            updatePs.setString(2, description);
+                            updatePs.setInt(3, planId);
+                            updatePs.setInt(4, esEntornoVal);
+                            updatePs.executeUpdate();
+                        }
+                    } else {
+                        String insertSql = "INSERT INTO GraficoVivienda (IdPlanFamiliar, RutaImagen, Descripcion, EsEntorno) VALUES (?, ?, ?, ?)";
+                        try (PreparedStatement insertPs = conn.prepareStatement(insertSql)) {
+                            insertPs.setInt(1, planId);
+                            insertPs.setString(2, savedFileName);
+                            insertPs.setString(3, description);
+                            insertPs.setInt(4, esEntornoVal);
+                            insertPs.executeUpdate();
+                        }
+                    }
                     resp.setStatus(HttpServletResponse.SC_CREATED);
                     resp.getWriter().write("{\"success\":true,\"message\":\"Archivo subido exitosamente\"}");
                     return;
@@ -1948,6 +2224,59 @@ public class PlanDetailsServlet extends HttpServlet {
                 return;
             }
 
+            // PATCH /api/availableResources/{id}
+            if (servletPath.contains("availableResources")) {
+                int idVal = Integer.parseInt(pathInfo.substring(1));
+                Object resourceIdObj = body.get("resource_id");
+                int resourceId = 1;
+                if (resourceIdObj instanceof Number) resourceId = ((Number) resourceIdObj).intValue();
+                else if (resourceIdObj instanceof String) resourceId = Integer.parseInt((String) resourceIdObj);
+
+                String description = (String) body.get("description");
+                String location = (String) body.get("location");
+
+                Object distanceObj = body.get("distance");
+                float distance = 0.0f;
+                if (distanceObj instanceof Number) distance = ((Number) distanceObj).floatValue();
+                else if (distanceObj instanceof String && !((String) distanceObj).isEmpty()) distance = Float.parseFloat((String) distanceObj);
+
+                String phone = (String) body.get("phone");
+
+                // Fetch service ID associated with the resource
+                int serviceId = 1;
+                String serviceSql = "SELECT s.IdServicio FROM Servicio s WHERE s.Nombre = (SELECT r.Servicio FROM Recurso r WHERE r.IdRecurso = ?)";
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(serviceSql)) {
+                    ps.setInt(1, resourceId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (rs.next()) {
+                            serviceId = rs.getInt("IdServicio");
+                        }
+                    }
+                } catch (Exception e) {
+                    // Fallback to default service ID 1
+                }
+
+                String sql = "UPDATE RecursoDisponible SET IdRecursoTipo = ?, IdServicio = ?, Ubicacion = ?, Distancia = ?, Telefono = ? WHERE IdRecurso = ?";
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setInt(1, resourceId);
+                    ps.setInt(2, serviceId);
+                    ps.setString(3, location != null ? location : "");
+                    ps.setFloat(4, distance);
+                    ps.setString(5, phone != null ? phone : "");
+                    ps.setInt(6, idVal);
+                    ps.executeUpdate();
+                }
+
+                // Update extraData cache
+                Map<String, Object> extra = extraData.computeIfAbsent("resource_" + idVal, k -> new HashMap<>());
+                extra.put("description", description != null ? description : "");
+
+                resp.getWriter().write("{\"success\":true,\"message\":\"Recurso disponible actualizado exitosamente\"}");
+                return;
+            }
+
             // PATCH /api/riskFactors/{id}
             if (servletPath.contains("riskFactors")) {
                 int idVal = Integer.parseInt(pathInfo.substring(1));
@@ -2036,6 +2365,23 @@ public class PlanDetailsServlet extends HttpServlet {
                     ps.executeUpdate();
                 }
                 resp.getWriter().write("{\"success\":true,\"message\":\"Accion de plan actualizada exitosamente\"}");
+                return;
+            }
+
+            // PATCH /api/housingGraphics/{id}/description
+            if (servletPath.contains("housingGraphics") && pathInfo != null && pathInfo.endsWith("/description")) {
+                String[] segments = pathInfo.split("/");
+                int graficoId = Integer.parseInt(segments[1]);
+                String description = (String) body.get("description");
+
+                String sql = "UPDATE GraficoVivienda SET Descripcion = ? WHERE IdGrafico = ?";
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setString(1, description != null ? description : "");
+                    ps.setInt(2, graficoId);
+                    ps.executeUpdate();
+                }
+                resp.getWriter().write("{\"success\":true,\"message\":\"Descripción de gráfico actualizada exitosamente\"}");
                 return;
             }
 
@@ -2137,6 +2483,19 @@ public class PlanDetailsServlet extends HttpServlet {
                 return;
             }
 
+            // DELETE /api/availableResources/{id}
+            if (servletPath.contains("availableResources")) {
+                String sql = "DELETE FROM RecursoDisponible WHERE IdRecurso = ?";
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setInt(1, idVal);
+                    ps.executeUpdate();
+                }
+                extraData.remove("resource_" + idVal);
+                resp.getWriter().write("{\"success\":true,\"message\":\"Recurso disponible eliminado exitosamente\"}");
+                return;
+            }
+
             // DELETE /api/vulnerabilityFactors/{id}
             if (servletPath.contains("vulnerabilityFactors")) {
                 String sql = "DELETE FROM Vulnerabilidad WHERE IdVulnerabilidad = ?";
@@ -2158,6 +2517,43 @@ public class PlanDetailsServlet extends HttpServlet {
                     ps.executeUpdate();
                 }
                 resp.getWriter().write("{\"success\":true,\"message\":\"Accion de plan de accion eliminada\"}");
+                return;
+            }
+
+            // DELETE /api/housingGraphics/{id}
+            if (servletPath.contains("housingGraphics")) {
+                String fileName = null;
+                // Fetch the filename first to delete the file on disk
+                String selectSql = "SELECT RutaImagen FROM GraficoVivienda WHERE IdGrafico = ?";
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(selectSql)) {
+                    ps.setInt(1, idVal);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (rs.next()) {
+                            fileName = rs.getString("RutaImagen");
+                        }
+                    }
+                } catch (Exception e) {
+                    // Ignored
+                }
+
+                // Delete from DB
+                String sql = "DELETE FROM GraficoVivienda WHERE IdGrafico = ?";
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setInt(1, idVal);
+                    ps.executeUpdate();
+                }
+
+                // Delete physical file
+                if (fileName != null && !fileName.equals("mock_graphic.png")) {
+                    java.io.File file = new java.io.File("/home/dylan/Documents/projects/df/DefensaCivilAPI/storage", fileName);
+                    if (file.exists() && file.isFile()) {
+                        file.delete();
+                    }
+                }
+
+                resp.getWriter().write("{\"success\":true,\"message\":\"Gráfico de vivienda eliminado exitosamente\"}");
                 return;
             }
 
