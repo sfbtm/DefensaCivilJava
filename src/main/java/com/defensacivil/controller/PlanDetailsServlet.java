@@ -445,43 +445,73 @@ public class PlanDetailsServlet extends HttpServlet {
                 if (pathInfo == null || pathInfo.equals("/")) {
                     // LIST ALL PLANS
                     List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = """
-                        SELECT p.IdPlanFamiliar, f.Nombre AS FamiliaNombre, p.Estado, p.Fecha
-                        FROM PlanFamiliar p
-                        JOIN Familia f ON p.IdFamilia = f.IdFamilia
-                        ORDER BY p.IdPlanFamiliar DESC
-                        """;
+                    String sql;
+                    if (UserServlet.loggedInRoleId == 3) { // Volunteer
+                        sql = """
+                            SELECT p.IdPlanFamiliar, f.Nombre AS FamiliaNombre, p.Estado, p.Fecha, u.Nombre AS VoluntarioNombre
+                            FROM PlanFamiliar p
+                            JOIN Familia f ON p.IdFamilia = f.IdFamilia
+                            JOIN Usuario u ON p.IdUsuario = u.IdUsuario
+                            WHERE p.IdUsuario = ?
+                            ORDER BY p.IdPlanFamiliar DESC
+                            """;
+                    } else if (UserServlet.loggedInRoleId == 2) { // Supervisor
+                        sql = """
+                            SELECT p.IdPlanFamiliar, f.Nombre AS FamiliaNombre, p.Estado, p.Fecha, u.Nombre AS VoluntarioNombre
+                            FROM PlanFamiliar p
+                            JOIN Familia f ON p.IdFamilia = f.IdFamilia
+                            JOIN Usuario u ON p.IdUsuario = u.IdUsuario
+                            WHERE u.IdSeccional = ?
+                            ORDER BY p.IdPlanFamiliar DESC
+                            """;
+                    } else { // Admin / default
+                        sql = """
+                            SELECT p.IdPlanFamiliar, f.Nombre AS FamiliaNombre, p.Estado, p.Fecha, u.Nombre AS VoluntarioNombre
+                            FROM PlanFamiliar p
+                            JOIN Familia f ON p.IdFamilia = f.IdFamilia
+                            JOIN Usuario u ON p.IdUsuario = u.IdUsuario
+                            ORDER BY p.IdPlanFamiliar DESC
+                            """;
+                    }
+
                     try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql);
-                         ResultSet rs = ps.executeQuery()) {
-                        while (rs.next()) {
-                            int idVal = rs.getInt("IdPlanFamiliar");
-                            String estadoStr = rs.getString("Estado");
-                            int statusId = 1;
-                            try { statusId = Integer.parseInt(estadoStr); } catch (Exception ignored) {}
-                            String statusText = getStatusName(statusId);
+                          PreparedStatement ps = conn.prepareStatement(sql)) {
+                        if (UserServlet.loggedInRoleId == 3) {
+                            ps.setInt(1, UserServlet.loggedInUserId);
+                        } else if (UserServlet.loggedInRoleId == 2) {
+                            ps.setInt(1, UserServlet.loggedInSectionalId);
+                        }
+                        try (ResultSet rs = ps.executeQuery()) {
+                            while (rs.next()) {
+                                int idVal = rs.getInt("IdPlanFamiliar");
+                                String estadoStr = rs.getString("Estado");
+                                int statusId = 1;
+                                try { statusId = Integer.parseInt(estadoStr); } catch (Exception ignored) {}
+                                String statusText = getStatusName(statusId);
 
-                            Map<String, Object> item = new HashMap<>();
-                            item.put("id", idVal);
-                            item.put("last_names", rs.getString("FamiliaNombre"));
-                            item.put("status", statusText);
-                            item.put("status_id", statusId);
-                            Map<String, Object> extra = extraData.getOrDefault("plan_" + idVal, Map.of());
-                            int familyTypeId = 3;
-                            Object ftIdObj = extra.get("family_type_id");
-                            if (ftIdObj instanceof Number) familyTypeId = ((Number) ftIdObj).intValue();
-                            else if (ftIdObj instanceof String) familyTypeId = Integer.parseInt((String) ftIdObj);
-                            
-                            String familyType = "Por Definir";
-                            if (familyTypeId == 1) familyType = "Vulnerable";
-                            else if (familyTypeId == 2) familyType = "No Vulnerable";
+                                Map<String, Object> item = new HashMap<>();
+                                item.put("id", idVal);
+                                item.put("last_names", rs.getString("FamiliaNombre"));
+                                item.put("status", statusText);
+                                item.put("status_id", statusId);
+                                item.put("responsable", rs.getString("VoluntarioNombre"));
+                                Map<String, Object> extra = extraData.getOrDefault("plan_" + idVal, Map.of());
+                                int familyTypeId = 3;
+                                Object ftIdObj = extra.get("family_type_id");
+                                if (ftIdObj instanceof Number) familyTypeId = ((Number) ftIdObj).intValue();
+                                else if (ftIdObj instanceof String) familyTypeId = Integer.parseInt((String) ftIdObj);
+                                
+                                String familyType = "Por Definir";
+                                if (familyTypeId == 1) familyType = "Vulnerable";
+                                else if (familyTypeId == 2) familyType = "No Vulnerable";
 
-                            item.put("family_type", familyType);
-                            item.put("family_type_id", familyTypeId);
-                            item.put("department", "Antioquia");
-                            item.put("city", "Medellín");
-                            item.put("date_create", rs.getDate("Fecha") != null ? rs.getDate("Fecha").toString() : "");
-                            list.add(item);
+                                item.put("family_type", familyType);
+                                item.put("family_type_id", familyTypeId);
+                                item.put("department", "Antioquia");
+                                item.put("city", "Medellín");
+                                item.put("date_create", rs.getDate("Fecha") != null ? rs.getDate("Fecha").toString() : "");
+                                list.add(item);
+                            }
                         }
                     }
                     resp.getWriter().write(gson.toJson(Map.of("data", list)));

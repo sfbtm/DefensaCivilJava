@@ -397,8 +397,32 @@ public class UserServlet extends HttpServlet {
                             int activeVal = rs.getInt("Activo");
                             Map<String, Object> user = new HashMap<>();
                             user.put("id", rs.getInt("IdUsuario"));
-                            user.put("names", rs.getString("Nombre"));
-                            user.put("last_names", "");
+                             String fullName = rs.getString("Nombre");
+                             String names = "";
+                             String lastNames = "";
+                             if (fullName != null) {
+                                 fullName = fullName.trim();
+                                 String[] parts = fullName.split("\\s+");
+                                 if (parts.length >= 4) {
+                                     names = parts[0] + " " + parts[1];
+                                     StringBuilder sb = new StringBuilder();
+                                     for (int i = 2; i < parts.length; i++) {
+                                         if (i > 2) sb.append(" ");
+                                         sb.append(parts[i]);
+                                     }
+                                     lastNames = sb.toString();
+                                 } else if (parts.length == 3) {
+                                     names = parts[0];
+                                     lastNames = parts[1] + " " + parts[2];
+                                 } else if (parts.length == 2) {
+                                     names = parts[0];
+                                     lastNames = parts[1];
+                                 } else {
+                                     names = fullName;
+                                 }
+                             }
+                             user.put("names", names);
+                             user.put("last_names", lastNames);
                             user.put("email", rs.getString("Email"));
                             user.put("document_type", rs.getString("DocumentoTipoNombre"));
                             user.put("document_number", rs.getString("Documento"));
