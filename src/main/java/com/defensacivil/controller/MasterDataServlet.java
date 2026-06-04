@@ -251,9 +251,7 @@ public class MasterDataServlet extends HttpServlet {
                                 item.put("is_active", true);
                             }
 
-                            // Retornar objeto directo para GET por id, no envuelto en array si la api lo requiere,
-                            // o envuelto segun la convencion. La funcion api.get("endpoint/id") suele devolver el objeto directamente.
-                            resp.getWriter().write(gson.toJson(item));
+                            resp.getWriter().write(gson.toJson(Map.of("data", item)));
                         } else {
                             resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
                             resp.getWriter().write("{\"success\":false,\"message\":\"Registro no encontrado\"}");

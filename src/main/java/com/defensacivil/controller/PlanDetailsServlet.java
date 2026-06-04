@@ -43,6 +43,7 @@ import java.util.concurrent.ConcurrentHashMap;
     "/api/vulnerableTest/*",
     "/api/animalGenders/*",
     "/api/availableResources/*",
+    "/api/audits/*",
     "/storage/*"
 })
 @MultipartConfig
@@ -101,6 +102,203 @@ public class PlanDetailsServlet extends HttpServlet {
         resp.setCharacterEncoding("UTF-8");
 
         try {
+            if (servletPath != null && servletPath.contains("audits")) {
+                if (pathInfo != null && pathInfo.contains("dashBoardSupervisor")) {
+                    int pendingCount = 0;
+                    int approvedCount = 0;
+                    int rejectedCount = 0;
+                    int inRevisionCount = 0;
+
+                    List<Map<String, Object>> latestPlans = new ArrayList<>();
+                    try (Connection conn = DatabaseConfig.getConnection()) {
+                        // pending_plans: status 1 or 3
+                        String sqlPending = "SELECT COUNT(*) FROM PlanFamiliar WHERE Estado IN ('1', '3')";
+                        try (PreparedStatement ps = conn.prepareStatement(sqlPending);
+                             ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) pendingCount = rs.getInt(1);
+                        }
+
+                        // in_revision_plans: status 4
+                        String sqlRevision = "SELECT COUNT(*) FROM PlanFamiliar WHERE Estado = '4'";
+                        try (PreparedStatement ps = conn.prepareStatement(sqlRevision);
+                             ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) inRevisionCount = rs.getInt(1);
+                        }
+
+                        // approved_plans: status 7
+                        String sqlApproved = "SELECT COUNT(*) FROM PlanFamiliar WHERE Estado = '7'";
+                        try (PreparedStatement ps = conn.prepareStatement(sqlApproved);
+                             ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) approvedCount = rs.getInt(1);
+                        }
+
+                        // rejected_plans: status 5 or 6
+                        String sqlRejected = "SELECT COUNT(*) FROM PlanFamiliar WHERE Estado IN ('5', '6')";
+                        try (PreparedStatement ps = conn.prepareStatement(sqlRejected);
+                             ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) rejectedCount = rs.getInt(1);
+                        }
+
+                        // latest_plans: 5 latest plans
+                        String sqlLatest = """
+                            SELECT p.IdPlanFamiliar, f.Nombre AS FamiliaNombre, p.Estado, p.Fecha, 
+                                   u.Nombre AS VoluntarioNombre, s.Nombre AS SeccionalNombre
+                            FROM PlanFamiliar p
+                            JOIN Familia f ON p.IdFamilia = f.IdFamilia
+                            LEFT JOIN Usuario u ON p.IdUsuario = u.IdUsuario
+                            LEFT JOIN Seccional s ON u.IdSeccional = s.IdSeccional
+                            ORDER BY p.IdPlanFamiliar DESC
+                            LIMIT 5
+                            """;
+                        try (PreparedStatement ps = conn.prepareStatement(sqlLatest);
+                             ResultSet rs = ps.executeQuery()) {
+                            while (rs.next()) {
+                                Map<String, Object> item = new HashMap<>();
+                                int idVal = rs.getInt("IdPlanFamiliar");
+                                String estadoStr = rs.getString("Estado");
+                                int statusId = 1;
+                                try { statusId = Integer.parseInt(estadoStr); } catch (Exception ignored) {}
+
+                                item.put("id", idVal);
+                                item.put("family_name", rs.getString("FamiliaNombre"));
+                                item.put("status_id", statusId);
+                                item.put("status", getStatusName(statusId));
+                                item.put("date", rs.getDate("Fecha") != null ? rs.getDate("Fecha").toString() : "");
+                                item.put("volunteer", rs.getString("VoluntarioNombre") != null ? rs.getString("VoluntarioNombre") : "Voluntario Civil");
+                                item.put("sectional", rs.getString("SeccionalNombre") != null ? rs.getString("SeccionalNombre") : "Antioquia");
+                                latestPlans.add(item);
+                            }
+                        }
+                    }
+
+                    Map<String, Object> data = new HashMap<>();
+                    data.put("pending_plans", pendingCount);
+                    data.put("in_revision_plans", inRevisionCount);
+                    data.put("approved_plans", approvedCount);
+                    data.put("rejected_plans", rejectedCount);
+                    data.put("time_validation", 120);
+                    data.put("latest_plans", latestPlans);
+
+                    resp.getWriter().write(gson.toJson(Map.of("data", data)));
+                    return;
+                } else if (pathInfo != null && pathInfo.contains("dashBoardAdmin")) {
+                    int activeCount = 0;
+                    int inactiveCount = 0;
+                    int requestCount = 0;
+                    int volunteerCount = 0;
+                    int supervisorCount = 0;
+
+                    try (Connection conn = DatabaseConfig.getConnection()) {
+                        // Summary active: Activo = 1
+                        String sqlActive = "SELECT COUNT(*) FROM Usuario WHERE Activo = 1";
+                        try (PreparedStatement ps = conn.prepareStatement(sqlActive);
+                             ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) activeCount = rs.getInt(1);
+                        }
+
+                        // Summary inactive: Activo = 2 or Activo = 0
+                        String sqlInactive = "SELECT COUNT(*) FROM Usuario WHERE Activo = 2 OR Activo = 0";
+                        try (PreparedStatement ps = conn.prepareStatement(sqlInactive);
+                             ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) inactiveCount = rs.getInt(1);
+                        }
+
+                        // Summary request: Activo = 3
+                        String sqlRequest = "SELECT COUNT(*) FROM Usuario WHERE Activo = 3";
+                        try (PreparedStatement ps = conn.prepareStatement(sqlRequest);
+                             ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) requestCount = rs.getInt(1);
+                        }
+
+                        // Roles volunteer: IdRol = 3
+                        String sqlVolunteer = "SELECT COUNT(*) FROM Usuario WHERE IdRol = 3";
+                        try (PreparedStatement ps = conn.prepareStatement(sqlVolunteer);
+                             ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) volunteerCount = rs.getInt(1);
+                        }
+
+                        // Roles supervisor: IdRol = 2
+                        String sqlSupervisor = "SELECT COUNT(*) FROM Usuario WHERE IdRol = 2";
+                        try (PreparedStatement ps = conn.prepareStatement(sqlSupervisor);
+                             ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) supervisorCount = rs.getInt(1);
+                        }
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
+
+                    Map<String, Object> summary = new HashMap<>();
+                    summary.put("active", activeCount);
+                    summary.put("inactive", inactiveCount);
+                    summary.put("request", requestCount);
+
+                    Map<String, Object> rols = new HashMap<>();
+                    rols.put("volunteer", volunteerCount);
+                    rols.put("supervisor", supervisorCount);
+
+                    List<Map<String, Object>> historyGeneral = List.of(
+                        Map.of(
+                            "name_model", "Seccional Antioquia",
+                            "action_execute", "Creación",
+                            "user_name", "Administrador Sistema",
+                            "rol", "Administrador",
+                            "date_time", "2026-06-01 10:15:30",
+                            "status_old", "Activo",
+                            "status_new", "Activo"
+                        ),
+                        Map.of(
+                            "name_model", "Organización Cruz Roja 1",
+                            "action_execute", "Actualización",
+                            "user_name", "Administrador Sistema",
+                            "rol", "Administrador",
+                            "date_time", "2026-06-02 09:30:15",
+                            "status_old", "Inactivo",
+                            "status_new", "Activo"
+                        )
+                    );
+
+                    List<Map<String, Object>> historyMembers = List.of(
+                        Map.of(
+                            "name_model", "Juan Perez",
+                            "action_execute", "Aprobación",
+                            "user_name", "Administrador Sistema",
+                            "rol", "Administrador",
+                            "date_time", "2026-06-03 14:05:10",
+                            "status_old", "Peticion",
+                            "status_new", "Activo"
+                        ),
+                        Map.of(
+                            "name_model", "Voluntario Civil",
+                            "action_execute", "Creación",
+                            "user_name", "Administrador Sistema",
+                            "rol", "Administrador",
+                            "date_time", "2026-06-02 11:20:00",
+                            "status_old", "Peticion",
+                            "status_new", "Activo"
+                        )
+                    );
+
+                    List<Map<String, Object>> monthlyChanges = List.of(
+                        Map.of("month", "Enero", "total", 15),
+                        Map.of("month", "Febrero", "total", 20),
+                        Map.of("month", "Marzo", "total", 8),
+                        Map.of("month", "Abril", "total", 12),
+                        Map.of("month", "Mayo", "total", 30),
+                        Map.of("month", "Junio", "total", 25)
+                    );
+
+                    Map<String, Object> responseData = new HashMap<>();
+                    responseData.put("summary", summary);
+                    responseData.put("rols", rols);
+                    responseData.put("history_general", historyGeneral);
+                    responseData.put("history_members", historyMembers);
+                    responseData.put("monthly_changes", monthlyChanges);
+
+                    resp.getWriter().write(gson.toJson(Map.of("data", responseData)));
+                    return;
+                }
+            }
+
             // MOCKS/CATALOGS
             if (servletPath.contains("statusPlans")) {
                 List<Map<String, Object>> list = List.of(
@@ -165,7 +363,7 @@ public class PlanDetailsServlet extends HttpServlet {
                         case 3 -> "Hijo/a";
                         default -> "Otro";
                     };
-                    resp.getWriter().write(gson.toJson(Map.of("id", id, "name", name)));
+                    resp.getWriter().write(gson.toJson(Map.of("data", Map.of("id", id, "name", name))));
                 } else {
                     List<Map<String, Object>> list = List.of(
                         Map.of("id", 1, "name", "Padre"),
@@ -192,7 +390,7 @@ public class PlanDetailsServlet extends HttpServlet {
                         case 8 -> "AB-";
                         default -> "O+";
                     };
-                    resp.getWriter().write(gson.toJson(Map.of("id", id, "name", name)));
+                    resp.getWriter().write(gson.toJson(Map.of("data", Map.of("id", id, "name", name))));
                 } else {
                     List<Map<String, Object>> list = List.of(
                         Map.of("id", 1, "name", "O+"),
@@ -210,10 +408,28 @@ public class PlanDetailsServlet extends HttpServlet {
             }
 
             if (servletPath.contains("animalGenders")) {
-                if (pathInfo != null && !pathInfo.equals("/")) {
+                if (pathInfo != null && pathInfo.startsWith("/pet/")) {
+                    int petId = Integer.parseInt(pathInfo.substring(5));
+                    String sql = "SELECT Genero FROM Mascotas WHERE IdMascota = ?";
+                    Map<String, Object> gender = Map.of("id", 1, "name", "Macho");
+                    try (Connection conn = DatabaseConfig.getConnection();
+                         PreparedStatement ps = conn.prepareStatement(sql)) {
+                        ps.setInt(1, petId);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) {
+                                String generoStr = rs.getString("Genero");
+                                int genderId = (generoStr != null && generoStr.equalsIgnoreCase("Hembra")) ? 2 : 1;
+                                String genderName = genderId == 1 ? "Macho" : "Hembra";
+                                gender = Map.of("id", genderId, "name", genderName);
+                            }
+                        }
+                    }
+                    resp.getWriter().write(gson.toJson(Map.of("data", gender)));
+                    return;
+                } else if (pathInfo != null && !pathInfo.equals("/")) {
                     int id = Integer.parseInt(pathInfo.substring(1));
                     String name = (id == 1) ? "Macho" : "Hembra";
-                    resp.getWriter().write(gson.toJson(Map.of("id", id, "name", name)));
+                    resp.getWriter().write(gson.toJson(Map.of("data", Map.of("id", id, "name", name))));
                 } else {
                     List<Map<String, Object>> list = List.of(
                         Map.of("id", 1, "name", "Macho"),
@@ -719,6 +935,16 @@ public class PlanDetailsServlet extends HttpServlet {
                                 else if (especieStr.equalsIgnoreCase("Ave")) speciesId = 3;
                             }
                             pet.put("species_id", speciesId);
+                            pet.put("species_name", especieStr != null ? especieStr : "Perro");
+                            pet.put("species", Map.of("id", speciesId, "name", especieStr != null ? especieStr : "Perro"));
+
+                            String generoStr = rs.getString("Genero");
+                            int genderId = (generoStr != null && generoStr.equalsIgnoreCase("Hembra")) ? 2 : 1;
+                            String genderName = genderId == 1 ? "Macho" : "Hembra";
+                            pet.put("animal_gender_id", genderId);
+                            pet.put("animal_gender_name", genderName);
+                            pet.put("animal_gender", Map.of("id", genderId, "name", genderName));
+
                             pet.put("family_plan_id", rs.getInt("IdPlanFamiliar"));
                             list.add(pet);
                         }
@@ -873,17 +1099,25 @@ public class PlanDetailsServlet extends HttpServlet {
                 } else {
                     // LIST ALL RISK FACTORS
                     List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = "SELECT IdFactorRiesgo, IdPlanFamiliar, IdTipoAmenaza, Ubicacion FROM FactorRiesgo";
+                    String sql = """
+                        SELECT f.IdFactorRiesgo, f.IdPlanFamiliar, f.IdTipoAmenaza, f.Ubicacion, t.Nombre AS AmenazaNombre
+                        FROM FactorRiesgo f
+                        JOIN TipoAmenaza t ON f.IdTipoAmenaza = t.IdTipoAmenaza
+                        """;
                     try (Connection conn = DatabaseConfig.getConnection();
                          PreparedStatement ps = conn.prepareStatement(sql);
                          ResultSet rs = ps.executeQuery()) {
                         while (rs.next()) {
-                            list.add(Map.of(
-                                "id", rs.getInt("IdFactorRiesgo"),
-                                "family_plan_id", rs.getInt("IdPlanFamiliar"),
-                                "threat_type_id", rs.getInt("IdTipoAmenaza"),
-                                "ubication", rs.getString("Ubicacion")
-                            ));
+                            int threatTypeId = rs.getInt("IdTipoAmenaza");
+                            String threatTypeName = rs.getString("AmenazaNombre");
+                            Map<String, Object> risk = new HashMap<>();
+                            risk.put("id", rs.getInt("IdFactorRiesgo"));
+                            risk.put("family_plan_id", rs.getInt("IdPlanFamiliar"));
+                            risk.put("threat_type_id", threatTypeId);
+                            risk.put("threat_type_name", threatTypeName);
+                            risk.put("threat_type", Map.of("id", threatTypeId, "name", threatTypeName != null ? threatTypeName : ""));
+                            risk.put("ubication", rs.getString("Ubicacion"));
+                            list.add(risk);
                         }
                     }
                     resp.getWriter().write(gson.toJson(Map.of("data", list)));
@@ -1160,7 +1394,7 @@ public class PlanDetailsServlet extends HttpServlet {
                         resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
                         resp.getWriter().write("{\"success\":false}");
                     } else {
-                        resp.getWriter().write(gson.toJson(item));
+                        resp.getWriter().write(gson.toJson(Map.of("data", item)));
                     }
                     return;
                 }
