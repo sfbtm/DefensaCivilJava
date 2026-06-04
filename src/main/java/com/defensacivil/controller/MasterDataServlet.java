@@ -1,6 +1,7 @@
 package com.defensacivil.controller;
 
 import com.defensacivil.config.DatabaseConfig;
+import com.defensacivil.config.ResponseUtil;
 import com.google.gson.Gson;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -14,7 +15,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -43,10 +43,19 @@ public class MasterDataServlet extends HttpServlet {
         String tableName;
         String idCol;
         String nameCol;
+        String jsonNameKey;
+        Map<String, String> extraColMap;
+
         EntityConfig(String tableName, String idCol, String nameCol) {
+            this(tableName, idCol, nameCol, "name", Map.of());
+        }
+
+        EntityConfig(String tableName, String idCol, String nameCol, String jsonNameKey, Map<String, String> extraColMap) {
             this.tableName = tableName;
             this.idCol = idCol;
             this.nameCol = nameCol;
+            this.jsonNameKey = jsonNameKey;
+            this.extraColMap = extraColMap;
         }
     }
 
@@ -59,9 +68,9 @@ public class MasterDataServlet extends HttpServlet {
         if (servletPath.contains("vulnerabilities")) return new EntityConfig("VulnerabilidadTipo", "IdTipoVulnerabilidad", "Nombre");
         if (servletPath.contains("sectors")) return new EntityConfig("Sector", "IdSector", "Nombre");
         if (servletPath.contains("species")) return new EntityConfig("Especie", "IdEspecie", "Nombre");
-        if (servletPath.contains("resources")) return new EntityConfig("Recurso", "IdRecurso", "Nombre");
-        if (servletPath.contains("vulnerableQuestions")) return new EntityConfig("Pregunta", "IdPregunta", "Texto");
-        if (servletPath.contains("organizations")) return new EntityConfig("Organizacion", "IdOrganizacion", "Nombre");
+        if (servletPath.contains("resources")) return new EntityConfig("Recurso", "IdRecurso", "Nombre", "name", Map.of("Servicio", "service", "Activo", "is_active"));
+        if (servletPath.contains("vulnerableQuestions")) return new EntityConfig("Pregunta", "IdPregunta", "Texto", "description", Map.of("Activa", "is_active", "Precaucion", "question_caution"));
+        if (servletPath.contains("organizations")) return new EntityConfig("Organizacion", "IdOrganizacion", "Nombre", "name", Map.of("IdSeccional", "sectional_id"));
         if (servletPath.contains("housingQualities")) return new EntityConfig("CalidadVivienda", "IdCalidad", "Nombre");
         if (servletPath.contains("genders")) return new EntityConfig("Genero", "IdGenero", "Nombre");
         return null;
@@ -76,23 +85,40 @@ public class MasterDataServlet extends HttpServlet {
         }
     }
 
+    private Map<String, Object> mapRow(ResultSet rs, EntityConfig cfg) throws SQLException {
+        Map<String, Object> item = new HashMap<>();
+        item.put("id", rs.getInt(cfg.idCol));
+        item.put(cfg.jsonNameKey, rs.getString(cfg.nameCol));
+        item.put("is_active", true);
+
+        for (Map.Entry<String, String> entry : cfg.extraColMap.entrySet()) {
+            String dbCol = entry.getKey();
+            String jsonKey = entry.getValue();
+            Object value = rs.getObject(dbCol);
+
+            if (value instanceof Boolean) {
+                item.put(jsonKey, value);
+            } else if (dbCol.equalsIgnoreCase("Activo") || dbCol.equalsIgnoreCase("Activa") || dbCol.equalsIgnoreCase("Precaucion")) {
+                item.put(jsonKey, rs.getBoolean(dbCol));
+            } else {
+                item.put(jsonKey, value);
+            }
+        }
+        return item;
+    }
+
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        resp.setContentType("application/json");
-        resp.setCharacterEncoding("UTF-8");
-
         String servletPath = req.getServletPath();
         EntityConfig cfg = getConfig(servletPath);
         if (cfg == null) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"success\":false,\"message\":\"Entidad no configurada\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "Entidad no configurada");
             return;
         }
 
         String pathInfo = req.getPathInfo();
 
         if (pathInfo != null && pathInfo.equals("/paginate")) {
-            // PAGINADO DE PREGUNTAS
             int page = 1;
             String pageStr = req.getParameter("page");
             if (pageStr != null && !pageStr.isEmpty()) {
@@ -104,25 +130,29 @@ public class MasterDataServlet extends HttpServlet {
             int total = 0;
             List<Map<String, Object>> list = new ArrayList<>();
 
+            boolean hasActiveCol = cfg.extraColMap.containsKey("Activa") || cfg.extraColMap.containsKey("Activo");
+            String activeColName = cfg.extraColMap.containsKey("Activa") ? "Activa" : "Activo";
+
+            String countSql = hasActiveCol 
+                ? String.format("SELECT COUNT(*) FROM %s WHERE %s = 1", cfg.tableName, activeColName)
+                : String.format("SELECT COUNT(*) FROM %s", cfg.tableName);
+
+            String selectSql = hasActiveCol 
+                ? String.format("SELECT * FROM %s WHERE %s = 1 LIMIT ? OFFSET ?", cfg.tableName, activeColName)
+                : String.format("SELECT * FROM %s LIMIT ? OFFSET ?", cfg.tableName);
+
             try (Connection conn = DatabaseConfig.getConnection()) {
-                // Count total
-                try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM Pregunta WHERE Activa = 1");
+                try (PreparedStatement ps = conn.prepareStatement(countSql);
                      ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) total = rs.getInt(1);
                 }
 
-                // Get page slice
-                try (PreparedStatement ps = conn.prepareStatement("SELECT IdPregunta, Texto, Activa, Precaucion FROM Pregunta WHERE Activa = 1 LIMIT ? OFFSET ?")) {
+                try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
                     ps.setInt(1, perPage);
                     ps.setInt(2, offset);
                     try (ResultSet rs = ps.executeQuery()) {
                         while (rs.next()) {
-                            Map<String, Object> item = new HashMap<>();
-                            item.put("id", rs.getInt("IdPregunta"));
-                            item.put("description", rs.getString("Texto"));
-                            item.put("is_active", rs.getBoolean("Activa"));
-                            item.put("question_caution", rs.getBoolean("Precaucion"));
-                            list.add(item);
+                            list.add(mapRow(rs, cfg));
                         }
                     }
                 }
@@ -140,88 +170,40 @@ public class MasterDataServlet extends HttpServlet {
                 paginateMap.put("total", total);
                 responseMap.put("paginate", paginateMap);
 
-                resp.getWriter().write(gson.toJson(responseMap));
-
+                ResponseUtil.sendSuccess(resp, responseMap);
             } catch (SQLException e) {
-                resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos\"}");
                 e.printStackTrace();
+                ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error de base de datos");
             }
             return;
         }
 
         if (pathInfo == null || pathInfo.equals("/")) {
-            // LISTAR TODOS
             List<Map<String, Object>> list = new ArrayList<>();
-            String sql;
-            if (servletPath.contains("resources")) {
-                sql = "SELECT IdRecurso, Nombre, Servicio, Activo FROM Recurso ORDER BY IdRecurso DESC";
-            } else if (servletPath.contains("vulnerableQuestions")) {
-                sql = "SELECT IdPregunta, Texto, Activa, Precaucion FROM Pregunta ORDER BY IdPregunta DESC";
-            } else if (servletPath.contains("organizations")) {
-                sql = "SELECT IdOrganizacion, Nombre, IdSeccional FROM Organizacion ORDER BY IdOrganizacion DESC";
-            } else {
-                sql = String.format("SELECT %s, %s FROM %s ORDER BY %s DESC", cfg.idCol, cfg.nameCol, cfg.tableName, cfg.idCol);
-            }
+            String sql = String.format("SELECT * FROM %s ORDER BY %s DESC", cfg.tableName, cfg.idCol);
 
             try (Connection conn = DatabaseConfig.getConnection();
                  PreparedStatement ps = conn.prepareStatement(sql);
                  ResultSet rs = ps.executeQuery()) {
 
                 while (rs.next()) {
-                    Map<String, Object> item = new HashMap<>();
-                    if (servletPath.contains("resources")) {
-                        item.put("id", rs.getInt("IdRecurso"));
-                        item.put("name", rs.getString("Nombre"));
-                        item.put("service", rs.getString("Servicio"));
-                        item.put("is_active", rs.getBoolean("Activo"));
-                    } else if (servletPath.contains("vulnerableQuestions")) {
-                        item.put("id", rs.getInt("IdPregunta"));
-                        item.put("description", rs.getString("Texto"));
-                        item.put("is_active", rs.getBoolean("Activa"));
-                        item.put("question_caution", rs.getBoolean("Precaucion"));
-                    } else if (servletPath.contains("organizations")) {
-                        item.put("id", rs.getInt("IdOrganizacion"));
-                        item.put("name", rs.getString("Nombre"));
-                        item.put("sectional_id", rs.getInt("IdSeccional"));
-                        item.put("is_active", true);
-                    } else {
-                        item.put("id", rs.getInt(cfg.idCol));
-                        item.put("name", rs.getString(cfg.nameCol));
-                        item.put("is_active", true);
-                    }
-                    list.add(item);
+                    list.add(mapRow(rs, cfg));
                 }
 
-                Map<String, Object> dataResp = new HashMap<>();
-                dataResp.put("data", list);
-                resp.getWriter().write(gson.toJson(dataResp));
-
+                ResponseUtil.sendSuccess(resp, list);
             } catch (SQLException e) {
-                resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos\"}");
                 e.printStackTrace();
+                ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error de base de datos");
             }
         } else {
-            // OBTENER UNO POR ID
             try {
                 String idStr = pathInfo.substring(1);
-                // Si es algo como /status/1, ignorarlo en GET
                 if (idStr.startsWith("status/")) {
                     idStr = idStr.substring(7);
                 }
                 int id = Integer.parseInt(idStr);
 
-                String sql;
-                if (servletPath.contains("resources")) {
-                    sql = "SELECT IdRecurso, Nombre, Servicio, Activo FROM Recurso WHERE IdRecurso = ?";
-                } else if (servletPath.contains("vulnerableQuestions")) {
-                    sql = "SELECT IdPregunta, Texto, Activa, Precaucion FROM Pregunta WHERE IdPregunta = ?";
-                } else if (servletPath.contains("organizations")) {
-                    sql = "SELECT IdOrganizacion, Nombre, IdSeccional FROM Organizacion WHERE IdOrganizacion = ?";
-                } else {
-                    sql = String.format("SELECT %s, %s FROM %s WHERE %s = ?", cfg.idCol, cfg.nameCol, cfg.tableName, cfg.idCol);
-                }
+                String sql = String.format("SELECT * FROM %s WHERE %s = ?", cfg.tableName, cfg.idCol);
 
                 try (Connection conn = DatabaseConfig.getConnection();
                      PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -229,56 +211,27 @@ public class MasterDataServlet extends HttpServlet {
                     ps.setInt(1, id);
                     try (ResultSet rs = ps.executeQuery()) {
                         if (rs.next()) {
-                            Map<String, Object> item = new HashMap<>();
-                            if (servletPath.contains("resources")) {
-                                item.put("id", rs.getInt("IdRecurso"));
-                                item.put("name", rs.getString("Nombre"));
-                                item.put("service", rs.getString("Servicio"));
-                                item.put("is_active", rs.getBoolean("Activo"));
-                            } else if (servletPath.contains("vulnerableQuestions")) {
-                                item.put("id", rs.getInt("IdPregunta"));
-                                item.put("description", rs.getString("Texto"));
-                                item.put("is_active", rs.getBoolean("Activa"));
-                                item.put("question_caution", rs.getBoolean("Precaucion"));
-                            } else if (servletPath.contains("organizations")) {
-                                item.put("id", rs.getInt("IdOrganizacion"));
-                                item.put("name", rs.getString("Nombre"));
-                                item.put("sectional_id", rs.getInt("IdSeccional"));
-                                item.put("is_active", true);
-                            } else {
-                                item.put("id", rs.getInt(cfg.idCol));
-                                item.put("name", rs.getString(cfg.nameCol));
-                                item.put("is_active", true);
-                            }
-
-                            resp.getWriter().write(gson.toJson(Map.of("data", item)));
+                            ResponseUtil.sendSuccess(resp, mapRow(rs, cfg));
                         } else {
-                            resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                            resp.getWriter().write("{\"success\":false,\"message\":\"Registro no encontrado\"}");
+                            ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Registro no encontrado");
                         }
                     }
                 }
             } catch (NumberFormatException e) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                resp.getWriter().write("{\"success\":false,\"message\":\"ID invalido\"}");
+                ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "ID invalido");
             } catch (SQLException e) {
-                resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos\"}");
                 e.printStackTrace();
+                ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error de base de datos");
             }
         }
     }
 
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        resp.setContentType("application/json");
-        resp.setCharacterEncoding("UTF-8");
-
         String servletPath = req.getServletPath();
         EntityConfig cfg = getConfig(servletPath);
         if (cfg == null) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"success\":false,\"message\":\"Entidad no configurada\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "Entidad no configurada");
             return;
         }
 
@@ -287,90 +240,89 @@ public class MasterDataServlet extends HttpServlet {
             Map<String, Object> body = gson.fromJson(reader, Map.class);
 
             if (body == null) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                resp.getWriter().write("{\"success\":false,\"message\":\"Cuerpo de peticion vacio\"}");
+                ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "Cuerpo de peticion vacio");
                 return;
             }
 
-            String sql;
-            Connection conn = DatabaseConfig.getConnection();
-            PreparedStatement ps;
+            List<String> columns = new ArrayList<>();
+            List<Object> values = new ArrayList<>();
 
-            if (servletPath.contains("resources")) {
-                String name = (String) body.get("name");
-                String service = (String) body.get("service");
-                sql = "INSERT INTO Recurso (Nombre, Servicio, Activo) VALUES (?, ?, 1)";
-                ps = conn.prepareStatement(sql);
-                ps.setString(1, name);
-                ps.setString(2, service);
-            } else if (servletPath.contains("vulnerableQuestions")) {
-                String description = (String) body.get("description");
-                Object cautionObj = body.get("question_caution");
-                int caution = 0;
-                if (cautionObj instanceof Number) {
-                    caution = ((Number) cautionObj).intValue();
-                } else if (cautionObj instanceof String) {
-                    caution = Integer.parseInt((String) cautionObj);
+            columns.add(cfg.nameCol);
+            values.add(body.get(cfg.jsonNameKey));
+
+            for (Map.Entry<String, String> entry : cfg.extraColMap.entrySet()) {
+                String dbCol = entry.getKey();
+                String jsonKey = entry.getValue();
+
+                Object val = body.get(jsonKey);
+                if (val == null) {
+                    if (dbCol.equalsIgnoreCase("Activo") || dbCol.equalsIgnoreCase("Activa")) {
+                        val = 1;
+                    } else if (dbCol.equalsIgnoreCase("Precaucion")) {
+                        val = 0;
+                    }
+                } else {
+                    if (val instanceof Boolean) {
+                        val = (Boolean) val ? 1 : 0;
+                    } else if (val instanceof Number) {
+                        val = ((Number) val).intValue();
+                    } else if (val instanceof String) {
+                        try {
+                            val = Integer.parseInt((String) val);
+                        } catch (NumberFormatException e) {
+                            // Dejar como string
+                        }
+                    }
                 }
-                sql = "INSERT INTO Pregunta (Texto, Activa, Precaucion) VALUES (?, 1, ?)";
-                ps = conn.prepareStatement(sql);
-                ps.setString(1, description);
-                ps.setInt(2, caution);
-            } else if (servletPath.contains("organizations")) {
-                String name = (String) body.get("name");
-                Object secIdObj = body.get("sectional_id");
-                int secId = 1;
-                if (secIdObj instanceof Number) {
-                    secId = ((Number) secIdObj).intValue();
-                } else if (secIdObj instanceof String) {
-                    secId = Integer.parseInt((String) secIdObj);
-                }
-                sql = "INSERT INTO Organizacion (Nombre, IdSeccional) VALUES (?, ?)";
-                ps = conn.prepareStatement(sql);
-                ps.setString(1, name);
-                ps.setInt(2, secId);
-            } else {
-                String name = (String) body.get("name");
-                sql = String.format("INSERT INTO %s (%s) VALUES (?)", cfg.tableName, cfg.nameCol);
-                ps = conn.prepareStatement(sql);
-                ps.setString(1, name);
+                columns.add(dbCol);
+                values.add(val);
             }
 
-            int affected = ps.executeUpdate();
-            ps.close();
-            conn.close();
+            StringBuilder sqlBuilder = new StringBuilder();
+            sqlBuilder.append("INSERT INTO ").append(cfg.tableName).append(" (");
+            for (int i = 0; i < columns.size(); i++) {
+                sqlBuilder.append(columns.get(i));
+                if (i < columns.size() - 1) sqlBuilder.append(", ");
+            }
+            sqlBuilder.append(") VALUES (");
+            for (int i = 0; i < columns.size(); i++) {
+                sqlBuilder.append("?");
+                if (i < columns.size() - 1) sqlBuilder.append(", ");
+            }
+            sqlBuilder.append(")");
 
-            if (affected > 0) {
-                resp.setStatus(HttpServletResponse.SC_CREATED);
-                resp.getWriter().write("{\"success\":true,\"message\":\"Creado exitosamente\"}");
-            } else {
-                resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                resp.getWriter().write("{\"success\":false,\"message\":\"No se pudo crear el registro\"}");
+            try (Connection conn = DatabaseConfig.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(sqlBuilder.toString())) {
+
+                for (int i = 0; i < values.size(); i++) {
+                    ps.setObject(i + 1, values.get(i));
+                }
+
+                int affected = ps.executeUpdate();
+                if (affected > 0) {
+                    ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, null, "Creado exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "No se pudo crear el registro");
+                }
             }
 
         } catch (Exception e) {
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            resp.getWriter().write("{\"success\":false,\"message\":\"Error interno o de base de datos\"}");
             e.printStackTrace();
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error interno o de base de datos");
         }
     }
 
     protected void doPatch(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        resp.setContentType("application/json");
-        resp.setCharacterEncoding("UTF-8");
-
         String servletPath = req.getServletPath();
         EntityConfig cfg = getConfig(servletPath);
         if (cfg == null) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"success\":false,\"message\":\"Entidad no configurada\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "Entidad no configurada");
             return;
         }
 
         String pathInfo = req.getPathInfo();
         if (pathInfo == null || pathInfo.equals("/")) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"success\":false,\"message\":\"ID requerido\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "ID requerido");
             return;
         }
 
@@ -387,17 +339,11 @@ public class MasterDataServlet extends HttpServlet {
             Map<String, Object> body = gson.fromJson(reader, Map.class);
 
             if (body == null) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                resp.getWriter().write("{\"success\":false,\"message\":\"Cuerpo de peticion vacio\"}");
+                ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "Cuerpo de peticion vacio");
                 return;
             }
 
-            String sql;
-            Connection conn = DatabaseConfig.getConnection();
-            PreparedStatement ps;
-
             if (isStatusUpdate) {
-                // ACTUALIZAR ESTADO DE ACTIVACION
                 Object activeObj = body.get("is_active");
                 int active = 1;
                 if (activeObj instanceof Boolean) {
@@ -406,102 +352,102 @@ public class MasterDataServlet extends HttpServlet {
                     active = ((Number) activeObj).intValue();
                 }
 
-                if (servletPath.contains("resources")) {
-                    sql = "UPDATE Recurso SET Activo = ? WHERE IdRecurso = ?";
-                } else if (servletPath.contains("vulnerableQuestions")) {
-                    sql = "UPDATE Pregunta SET Activa = ? WHERE IdPregunta = ?";
-                } else {
-                    // Otras tablas no tienen columna de activacion, responder exito simulado
-                    resp.getWriter().write("{\"success\":true,\"message\":\"Estado actualizado (simulado)\"}");
-                    conn.close();
+                String activeCol = null;
+                for (Map.Entry<String, String> entry : cfg.extraColMap.entrySet()) {
+                    if (entry.getValue().equals("is_active")) {
+                        activeCol = entry.getKey();
+                        break;
+                    }
+                }
+
+                if (activeCol == null) {
+                    ResponseUtil.sendSuccess(resp, "Estado actualizado (simulado)");
                     return;
                 }
-                ps = conn.prepareStatement(sql);
-                ps.setInt(1, active);
-                ps.setInt(2, id);
 
-            } else {
-                // ACTUALIZAR CAMPOS
-                if (servletPath.contains("resources")) {
-                    String name = (String) body.get("name");
-                    String service = (String) body.get("service");
-                    sql = "UPDATE Recurso SET Nombre = ?, Servicio = ? WHERE IdRecurso = ?";
-                    ps = conn.prepareStatement(sql);
-                    ps.setString(1, name);
-                    ps.setString(2, service);
-                    ps.setInt(3, id);
-                } else if (servletPath.contains("vulnerableQuestions")) {
-                    String description = (String) body.get("description");
-                    Object cautionObj = body.get("question_caution");
-                    int caution = 0;
-                    if (cautionObj instanceof Number) {
-                        caution = ((Number) cautionObj).intValue();
-                    } else if (cautionObj instanceof String) {
-                        caution = Integer.parseInt((String) cautionObj);
-                    }
-                    sql = "UPDATE Pregunta SET Texto = ?, Precaucion = ? WHERE IdPregunta = ?";
-                    ps = conn.prepareStatement(sql);
-                    ps.setString(1, description);
-                    ps.setInt(2, caution);
-                    ps.setInt(3, id);
-                } else if (servletPath.contains("organizations")) {
-                    String name = (String) body.get("name");
-                    Object secIdObj = body.get("sectional_id");
-                    int secId = 1;
-                    if (secIdObj instanceof Number) {
-                        secId = ((Number) secIdObj).intValue();
-                    } else if (secIdObj instanceof String) {
-                        secId = Integer.parseInt((String) secIdObj);
-                    }
-                    sql = "UPDATE Organizacion SET Nombre = ?, IdSeccional = ? WHERE IdOrganizacion = ?";
-                    ps = conn.prepareStatement(sql);
-                    ps.setString(1, name);
-                    ps.setInt(2, secId);
-                    ps.setInt(3, id);
-                } else {
-                    String name = (String) body.get("name");
-                    sql = String.format("UPDATE %s SET %s = ? WHERE %s = ?", cfg.tableName, cfg.nameCol, cfg.idCol);
-                    ps = conn.prepareStatement(sql);
-                    ps.setString(1, name);
+                String sql = String.format("UPDATE %s SET %s = ? WHERE %s = ?", cfg.tableName, activeCol, cfg.idCol);
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setInt(1, active);
                     ps.setInt(2, id);
+                    int affected = ps.executeUpdate();
+                    if (affected > 0) {
+                        ResponseUtil.sendSuccess(resp, "Actualizado exitosamente");
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Registro no encontrado");
+                    }
+                }
+            } else {
+                List<String> setClauses = new ArrayList<>();
+                List<Object> values = new ArrayList<>();
+
+                if (body.containsKey(cfg.jsonNameKey)) {
+                    setClauses.add(cfg.nameCol + " = ?");
+                    values.add(body.get(cfg.jsonNameKey));
+                }
+
+                for (Map.Entry<String, String> entry : cfg.extraColMap.entrySet()) {
+                    String dbCol = entry.getKey();
+                    String jsonKey = entry.getValue();
+
+                    if (body.containsKey(jsonKey)) {
+                        setClauses.add(dbCol + " = ?");
+                        Object val = body.get(jsonKey);
+                        if (val instanceof Boolean) {
+                            val = (Boolean) val ? 1 : 0;
+                        } else if (val instanceof Number) {
+                            val = ((Number) val).intValue();
+                        } else if (val instanceof String) {
+                            try {
+                                val = Integer.parseInt((String) val);
+                            } catch (NumberFormatException e) {
+                                // Dejar como string
+                            }
+                        }
+                        values.add(val);
+                    }
+                }
+
+                if (setClauses.isEmpty()) {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "No hay campos para actualizar");
+                    return;
+                }
+
+                String sql = String.format("UPDATE %s SET %s WHERE %s = ?", cfg.tableName, String.join(", ", setClauses), cfg.idCol);
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(sql)) {
+
+                    for (int i = 0; i < values.size(); i++) {
+                        ps.setObject(i + 1, values.get(i));
+                    }
+                    ps.setInt(values.size() + 1, id);
+
+                    int affected = ps.executeUpdate();
+                    if (affected > 0) {
+                        ResponseUtil.sendSuccess(resp, "Actualizado exitosamente");
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Registro no encontrado");
+                    }
                 }
             }
-
-            int affected = ps.executeUpdate();
-            ps.close();
-            conn.close();
-
-            if (affected > 0) {
-                resp.getWriter().write("{\"success\":true,\"message\":\"Actualizado exitosamente\"}");
-            } else {
-                resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                resp.getWriter().write("{\"success\":false,\"message\":\"Registro no encontrado\"}");
-            }
-
         } catch (Exception e) {
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            resp.getWriter().write("{\"success\":false,\"message\":\"Error interno o de base de datos\"}");
             e.printStackTrace();
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error interno o de base de datos");
         }
     }
 
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        resp.setContentType("application/json");
-        resp.setCharacterEncoding("UTF-8");
-
         String servletPath = req.getServletPath();
         EntityConfig cfg = getConfig(servletPath);
         if (cfg == null) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"success\":false,\"message\":\"Entidad no configurada\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "Entidad no configurada");
             return;
         }
 
         String pathInfo = req.getPathInfo();
         if (pathInfo == null || pathInfo.equals("/")) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"success\":false,\"message\":\"ID requerido para eliminar\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "ID requerido para eliminar");
             return;
         }
 
@@ -516,19 +462,16 @@ public class MasterDataServlet extends HttpServlet {
                 int affected = ps.executeUpdate();
 
                 if (affected > 0) {
-                    resp.getWriter().write("{\"success\":true,\"message\":\"Eliminado exitosamente\"}");
+                    ResponseUtil.sendSuccess(resp, "Eliminado exitosamente");
                 } else {
-                    resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                    resp.getWriter().write("{\"success\":false,\"message\":\"Registro no encontrado\"}");
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Registro no encontrado");
                 }
             }
         } catch (NumberFormatException e) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"success\":false,\"message\":\"ID invalido\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "ID invalido");
         } catch (SQLException e) {
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos o restriccion de clave foranea\"}");
             e.printStackTrace();
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error de base de datos o restriccion de clave foranea");
         }
     }
 }
