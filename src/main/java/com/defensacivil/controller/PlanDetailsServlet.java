@@ -4,6 +4,12 @@ import com.defensacivil.config.DatabaseConfig;
 import com.defensacivil.config.ResponseUtil;
 import com.defensacivil.dao.MascotaDAO;
 import com.defensacivil.dao.MascotaDAOImpl;
+import com.defensacivil.dao.PlanFamiliarDAO;
+import com.defensacivil.dao.PlanFamiliarDAOImpl;
+import com.defensacivil.dao.IntegranteDAO;
+import com.defensacivil.dao.IntegranteDAOImpl;
+import com.defensacivil.dao.VulnerabilidadDAO;
+import com.defensacivil.dao.VulnerabilidadDAOImpl;
 import com.google.gson.Gson;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.MultipartConfig;
@@ -58,6 +64,9 @@ public class PlanDetailsServlet extends HttpServlet {
     private static final Map<String, Map<String, Object>> extraData = new ConcurrentHashMap<>();
 
     private final MascotaDAO mascotaDAO = new MascotaDAOImpl(extraData);
+    private final PlanFamiliarDAO planFamiliarDAO = new PlanFamiliarDAOImpl(extraData);
+    private final IntegranteDAO integranteDAO = new IntegranteDAOImpl(extraData);
+    private final VulnerabilidadDAO vulnerabilidadDAO = new VulnerabilidadDAOImpl(extraData);
 
     @Override
     protected void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -109,198 +118,12 @@ public class PlanDetailsServlet extends HttpServlet {
         try {
             if (servletPath != null && servletPath.contains("audits")) {
                 if (pathInfo != null && pathInfo.contains("dashBoardSupervisor")) {
-                    int pendingCount = 0;
-                    int approvedCount = 0;
-                    int rejectedCount = 0;
-                    int inRevisionCount = 0;
-
-                    List<Map<String, Object>> latestPlans = new ArrayList<>();
-                    try (Connection conn = DatabaseConfig.getConnection()) {
-                        // pending_plans: status 1 or 3
-                        String sqlPending = "SELECT COUNT(*) FROM PlanFamiliar WHERE Estado IN ('1', '3')";
-                        try (PreparedStatement ps = conn.prepareStatement(sqlPending);
-                             ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) pendingCount = rs.getInt(1);
-                        }
-
-                        // in_revision_plans: status 4
-                        String sqlRevision = "SELECT COUNT(*) FROM PlanFamiliar WHERE Estado = '4'";
-                        try (PreparedStatement ps = conn.prepareStatement(sqlRevision);
-                             ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) inRevisionCount = rs.getInt(1);
-                        }
-
-                        // approved_plans: status 7
-                        String sqlApproved = "SELECT COUNT(*) FROM PlanFamiliar WHERE Estado = '7'";
-                        try (PreparedStatement ps = conn.prepareStatement(sqlApproved);
-                             ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) approvedCount = rs.getInt(1);
-                        }
-
-                        // rejected_plans: status 5 or 6
-                        String sqlRejected = "SELECT COUNT(*) FROM PlanFamiliar WHERE Estado IN ('5', '6')";
-                        try (PreparedStatement ps = conn.prepareStatement(sqlRejected);
-                             ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) rejectedCount = rs.getInt(1);
-                        }
-
-                        // latest_plans: 5 latest plans
-                        String sqlLatest = """
-                            SELECT p.IdPlanFamiliar, f.Nombre AS FamiliaNombre, p.Estado, p.Fecha, 
-                                   u.Nombre AS VoluntarioNombre, s.Nombre AS SeccionalNombre
-                            FROM PlanFamiliar p
-                            JOIN Familia f ON p.IdFamilia = f.IdFamilia
-                            LEFT JOIN Usuario u ON p.IdUsuario = u.IdUsuario
-                            LEFT JOIN Organizacion org ON u.IdOrganizacion = org.IdOrganizacion
-                            LEFT JOIN Seccional s ON org.IdSeccional = s.IdSeccional
-                            ORDER BY p.IdPlanFamiliar DESC
-                            LIMIT 5
-                            """;
-                        try (PreparedStatement ps = conn.prepareStatement(sqlLatest);
-                             ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                Map<String, Object> item = new HashMap<>();
-                                int idVal = rs.getInt("IdPlanFamiliar");
-                                String estadoStr = rs.getString("Estado");
-                                int statusId = 1;
-                                try { statusId = Integer.parseInt(estadoStr); } catch (Exception ignored) {}
-
-                                item.put("id", idVal);
-                                item.put("family_name", rs.getString("FamiliaNombre"));
-                                item.put("status_id", statusId);
-                                item.put("status", getStatusName(statusId));
-                                item.put("date", rs.getDate("Fecha") != null ? rs.getDate("Fecha").toString() : "");
-                                item.put("volunteer", rs.getString("VoluntarioNombre") != null ? rs.getString("VoluntarioNombre") : "Voluntario Civil");
-                                item.put("sectional", rs.getString("SeccionalNombre") != null ? rs.getString("SeccionalNombre") : "Antioquia");
-                                latestPlans.add(item);
-                            }
-                        }
-                    }
-
-                    Map<String, Object> data = new HashMap<>();
-                    data.put("pending_plans", pendingCount);
-                    data.put("in_revision_plans", inRevisionCount);
-                    data.put("approved_plans", approvedCount);
-                    data.put("rejected_plans", rejectedCount);
-                    data.put("time_validation", 120);
-                    data.put("latest_plans", latestPlans);
-
-                    resp.getWriter().write(gson.toJson(Map.of("data", data)));
+                    Map<String, Object> data = planFamiliarDAO.getSupervisorDashboard();
+                    ResponseUtil.sendSuccess(resp, data);
                     return;
                 } else if (pathInfo != null && pathInfo.contains("dashBoardAdmin")) {
-                    int activeCount = 0;
-                    int inactiveCount = 0;
-                    int requestCount = 0;
-                    int volunteerCount = 0;
-                    int supervisorCount = 0;
-
-                    try (Connection conn = DatabaseConfig.getConnection()) {
-                        // Summary active: Activo = 1
-                        String sqlActive = "SELECT COUNT(*) FROM Usuario WHERE Activo = 1";
-                        try (PreparedStatement ps = conn.prepareStatement(sqlActive);
-                             ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) activeCount = rs.getInt(1);
-                        }
-
-                        // Summary inactive: Activo = 2 or Activo = 0
-                        String sqlInactive = "SELECT COUNT(*) FROM Usuario WHERE Activo = 2 OR Activo = 0";
-                        try (PreparedStatement ps = conn.prepareStatement(sqlInactive);
-                             ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) inactiveCount = rs.getInt(1);
-                        }
-
-                        // Summary request: Activo = 3
-                        String sqlRequest = "SELECT COUNT(*) FROM Usuario WHERE Activo = 3";
-                        try (PreparedStatement ps = conn.prepareStatement(sqlRequest);
-                             ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) requestCount = rs.getInt(1);
-                        }
-
-                        // Roles volunteer: IdRol = 3
-                        String sqlVolunteer = "SELECT COUNT(*) FROM Usuario WHERE IdRol = 3";
-                        try (PreparedStatement ps = conn.prepareStatement(sqlVolunteer);
-                             ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) volunteerCount = rs.getInt(1);
-                        }
-
-                        // Roles supervisor: IdRol = 2
-                        String sqlSupervisor = "SELECT COUNT(*) FROM Usuario WHERE IdRol = 2";
-                        try (PreparedStatement ps = conn.prepareStatement(sqlSupervisor);
-                             ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) supervisorCount = rs.getInt(1);
-                        }
-                    } catch (SQLException e) {
-                        e.printStackTrace();
-                    }
-
-                    Map<String, Object> summary = new HashMap<>();
-                    summary.put("active", activeCount);
-                    summary.put("inactive", inactiveCount);
-                    summary.put("request", requestCount);
-
-                    Map<String, Object> rols = new HashMap<>();
-                    rols.put("volunteer", volunteerCount);
-                    rols.put("supervisor", supervisorCount);
-
-                    List<Map<String, Object>> historyGeneral = List.of(
-                        Map.of(
-                            "name_model", "Seccional Antioquia",
-                            "action_execute", "Creación",
-                            "user_name", "Administrador Sistema",
-                            "rol", "Administrador",
-                            "date_time", "2026-06-01 10:15:30",
-                            "status_old", "Activo",
-                            "status_new", "Activo"
-                        ),
-                        Map.of(
-                            "name_model", "Organización Cruz Roja 1",
-                            "action_execute", "Actualización",
-                            "user_name", "Administrador Sistema",
-                            "rol", "Administrador",
-                            "date_time", "2026-06-02 09:30:15",
-                            "status_old", "Inactivo",
-                            "status_new", "Activo"
-                        )
-                    );
-
-                    List<Map<String, Object>> historyMembers = List.of(
-                        Map.of(
-                            "name_model", "Juan Perez",
-                            "action_execute", "Aprobación",
-                            "user_name", "Administrador Sistema",
-                            "rol", "Administrador",
-                            "date_time", "2026-06-03 14:05:10",
-                            "status_old", "Peticion",
-                            "status_new", "Activo"
-                        ),
-                        Map.of(
-                            "name_model", "Voluntario Civil",
-                            "action_execute", "Creación",
-                            "user_name", "Administrador Sistema",
-                            "rol", "Administrador",
-                            "date_time", "2026-06-02 11:20:00",
-                            "status_old", "Peticion",
-                            "status_new", "Activo"
-                        )
-                    );
-
-                    List<Map<String, Object>> monthlyChanges = List.of(
-                        Map.of("month", "Enero", "total", 15),
-                        Map.of("month", "Febrero", "total", 20),
-                        Map.of("month", "Marzo", "total", 8),
-                        Map.of("month", "Abril", "total", 12),
-                        Map.of("month", "Mayo", "total", 30),
-                        Map.of("month", "Junio", "total", 25)
-                    );
-
-                    Map<String, Object> responseData = new HashMap<>();
-                    responseData.put("summary", summary);
-                    responseData.put("rols", rols);
-                    responseData.put("history_general", historyGeneral);
-                    responseData.put("history_members", historyMembers);
-                    responseData.put("monthly_changes", monthlyChanges);
-
-                    resp.getWriter().write(gson.toJson(Map.of("data", responseData)));
+                    Map<String, Object> responseData = planFamiliarDAO.getAdminDashboard();
+                    ResponseUtil.sendSuccess(resp, responseData);
                     return;
                 }
             }
@@ -448,196 +271,49 @@ public class PlanDetailsServlet extends HttpServlet {
             // FAMILY PLANS
             if (servletPath.contains("familyPlans")) {
                 if (pathInfo == null || pathInfo.equals("/")) {
-                    // LIST ALL PLANS
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    String sql;
-                    if (UserServlet.loggedInRoleId == 3) { // Volunteer
-                        sql = """
-                            SELECT p.IdPlanFamiliar, f.Nombre AS FamiliaNombre, p.Estado, p.Fecha, u.Nombre AS VoluntarioNombre
-                            FROM PlanFamiliar p
-                            JOIN Familia f ON p.IdFamilia = f.IdFamilia
-                            JOIN Usuario u ON p.IdUsuario = u.IdUsuario
-                            WHERE p.IdUsuario = ?
-                            ORDER BY p.IdPlanFamiliar DESC
-                            """;
-                    } else if (UserServlet.loggedInRoleId == 2) { // Supervisor
-                        sql = """
-                            SELECT p.IdPlanFamiliar, f.Nombre AS FamiliaNombre, p.Estado, p.Fecha, u.Nombre AS VoluntarioNombre
-                            FROM PlanFamiliar p
-                            JOIN Familia f ON p.IdFamilia = f.IdFamilia
-                            JOIN Usuario u ON p.IdUsuario = u.IdUsuario
-                            LEFT JOIN Organizacion org ON u.IdOrganizacion = org.IdOrganizacion
-                            WHERE org.IdSeccional = ?
-                            ORDER BY p.IdPlanFamiliar DESC
-                            """;
-                    } else { // Admin / default
-                        sql = """
-                            SELECT p.IdPlanFamiliar, f.Nombre AS FamiliaNombre, p.Estado, p.Fecha, u.Nombre AS VoluntarioNombre
-                            FROM PlanFamiliar p
-                            JOIN Familia f ON p.IdFamilia = f.IdFamilia
-                            JOIN Usuario u ON p.IdUsuario = u.IdUsuario
-                            ORDER BY p.IdPlanFamiliar DESC
-                            """;
+                    jakarta.servlet.http.HttpSession session = req.getSession();
+                    Integer loggedInUserId = (Integer) session.getAttribute("userId");
+                    Integer loggedInRoleId = (Integer) session.getAttribute("roleId");
+                    Integer loggedInSectionalId = (Integer) session.getAttribute("sectionalId");
+
+                    if (loggedInUserId == null || loggedInRoleId == null || loggedInSectionalId == null) {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_UNAUTHORIZED, "Usuario no autenticado o sesion invalida");
+                        return;
                     }
 
-                    try (Connection conn = DatabaseConfig.getConnection();
-                          PreparedStatement ps = conn.prepareStatement(sql)) {
-                        if (UserServlet.loggedInRoleId == 3) {
-                            ps.setInt(1, UserServlet.loggedInUserId);
-                        } else if (UserServlet.loggedInRoleId == 2) {
-                            ps.setInt(1, UserServlet.loggedInSectionalId);
-                        }
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                int idVal = rs.getInt("IdPlanFamiliar");
-                                String estadoStr = rs.getString("Estado");
-                                int statusId = 1;
-                                try { statusId = Integer.parseInt(estadoStr); } catch (Exception ignored) {}
-                                String statusText = getStatusName(statusId);
+                    int userId = loggedInUserId;
+                    int roleId = loggedInRoleId;
+                    int sectionalId = loggedInSectionalId;
 
-                                Map<String, Object> item = new HashMap<>();
-                                item.put("id", idVal);
-                                item.put("last_names", rs.getString("FamiliaNombre"));
-                                item.put("status", statusText);
-                                item.put("status_id", statusId);
-                                item.put("responsable", rs.getString("VoluntarioNombre"));
-                                Map<String, Object> extra = extraData.getOrDefault("plan_" + idVal, Map.of());
-                                int familyTypeId = 3;
-                                Object ftIdObj = extra.get("family_type_id");
-                                if (ftIdObj instanceof Number) familyTypeId = ((Number) ftIdObj).intValue();
-                                else if (ftIdObj instanceof String) familyTypeId = Integer.parseInt((String) ftIdObj);
-                                
-                                String familyType = "Por Definir";
-                                if (familyTypeId == 1) familyType = "Vulnerable";
-                                else if (familyTypeId == 2) familyType = "No Vulnerable";
-
-                                item.put("family_type", familyType);
-                                item.put("family_type_id", familyTypeId);
-                                item.put("department", "Antioquia");
-                                item.put("city", "Medellín");
-                                item.put("date_create", rs.getDate("Fecha") != null ? rs.getDate("Fecha").toString() : "");
-                                list.add(item);
-                            }
-                        }
-                    }
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
+                    List<Map<String, Object>> list = planFamiliarDAO.getFamilyPlans(roleId, userId, sectionalId);
+                    ResponseUtil.sendSuccess(resp, list);
                     return;
 
                 } else if (pathInfo.startsWith("/check-access/")) {
-                    resp.getWriter().write("{\"success\":true,\"data\":{\"has_access\":true,\"access_check\":true}}");
+                    ResponseUtil.sendSuccess(resp, Map.of("has_access", true, "access_check", true));
                     return;
 
                 } else if (pathInfo.startsWith("/has-members/")) {
                     int idVal = Integer.parseInt(pathInfo.substring(13));
-                    int count = 0;
-                    String sql = "SELECT COUNT(*) FROM Integrante WHERE IdPlanFamiliar = ?";
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, idVal);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) count = rs.getInt(1);
-                        }
-                    }
-                    resp.getWriter().write(gson.toJson(Map.of("data", Map.of("has_members", count > 0))));
+                    boolean hasMembers = planFamiliarDAO.hasMembers(idVal);
+                    ResponseUtil.sendSuccess(resp, Map.of("has_members", hasMembers));
                     return;
 
                 } else if (pathInfo.startsWith("/validate-requirements/")) {
                     int idVal = Integer.parseInt(pathInfo.substring(23));
-                    int memberCount = 0;
-                    int riskCount = 0;
-                    int resourceCount = 0;
-
-                    try (Connection conn = DatabaseConfig.getConnection()) {
-                        try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM Integrante WHERE IdPlanFamiliar = ?")) {
-                            ps.setInt(1, idVal);
-                            try (ResultSet rs = ps.executeQuery()) { if (rs.next()) memberCount = rs.getInt(1); }
-                        }
-                        try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM FactorRiesgo WHERE IdPlanFamiliar = ?")) {
-                            ps.setInt(1, idVal);
-                            try (ResultSet rs = ps.executeQuery()) { if (rs.next()) riskCount = rs.getInt(1); }
-                        }
-                        try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM RecursoDisponible WHERE IdPlanFamiliar = ?")) {
-                            ps.setInt(1, idVal);
-                            try (ResultSet rs = ps.executeQuery()) { if (rs.next()) resourceCount = rs.getInt(1); }
-                        }
-                    }
-
-                    Map<String, Object> valMap = new HashMap<>();
-                    valMap.put("is_valid", memberCount >= 2 && riskCount >= 1 && resourceCount >= 1);
-                    valMap.put("has_min_members", memberCount >= 2);
-                    valMap.put("has_risk_factors", riskCount >= 1);
-                    valMap.put("has_resources", resourceCount >= 1);
-                    valMap.put("has_photos", true); // Pass mock
-                    valMap.put("has_graphics", true); // Pass mock
-                    valMap.put("has_action_before", true);
-                    valMap.put("has_action_during", true);
-                    valMap.put("has_action_after", true);
-
-                    resp.getWriter().write(gson.toJson(Map.of("data", valMap)));
+                    Map<String, Object> valMap = planFamiliarDAO.validateRequirements(idVal);
+                    ResponseUtil.sendSuccess(resp, valMap);
                     return;
 
                 } else {
                     // GET SINGLE PLAN BY ID
                     int idVal = Integer.parseInt(pathInfo.substring(1));
-                    String sql = """
-                        SELECT p.IdPlanFamiliar, f.Nombre AS FamiliaNombre, f.Telefono, f.Sector, f.CalidadVivienda, p.Estado
-                        FROM PlanFamiliar p
-                        JOIN Familia f ON p.IdFamilia = f.IdFamilia
-                        WHERE p.IdPlanFamiliar = ?
-                        """;
-                    Map<String, Object> item = new HashMap<>();
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, idVal);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) {
-                                int statusId = 1;
-                                try { statusId = Integer.parseInt(rs.getString("Estado")); } catch (Exception ignored) {}
-                                
-                                // Read unmapped fields from memory
-                                Map<String, Object> extra = extraData.getOrDefault("plan_" + idVal, Map.of());
-                                int familyTypeId = 3;
-                                Object ftIdObj = extra.get("family_type_id");
-                                if (ftIdObj instanceof Number) familyTypeId = ((Number) ftIdObj).intValue();
-                                else if (ftIdObj instanceof String) familyTypeId = Integer.parseInt((String) ftIdObj);
-                                
-                                String familyType = "Por Definir";
-                                if (familyTypeId == 1) familyType = "Vulnerable";
-                                else if (familyTypeId == 2) familyType = "No Vulnerable";
-
-                                item.put("id", rs.getInt("IdPlanFamiliar"));
-                                item.put("last_names", rs.getString("FamiliaNombre"));
-                                item.put("family_type", familyType);
-                                item.put("family_type_id", familyTypeId);
-                                item.put("landline_phone", rs.getString("Telefono") != null ? rs.getString("Telefono") : "");
-                                item.put("status", getStatusName(statusId));
-                                item.put("status_plan_id", statusId);
-                                item.put("status_id", statusId);
-
-                                item.put("zone_id", extra.getOrDefault("zone_id", 1));
-                                item.put("department_id", extra.getOrDefault("department_id", 1));
-                                item.put("city_id", extra.getOrDefault("city_id", 1));
-                                item.put("address", extra.getOrDefault("address", ""));
-                                item.put("sector_id", extra.getOrDefault("sector_id", 1));
-                                item.put("sector_name", extra.getOrDefault("sector_name", ""));
-                                item.put("housing_quality_id", extra.getOrDefault("housing_quality_id", 1));
-                                item.put("housing_quality", "Propia");
-                                item.put("city", "Medellín");
-                                item.put("department", "Antioquia");
-                                item.put("created_at", LocalDate.now().toString());
-
-                                // Read comment from ValidacionPlan
-                                String commentSql = "SELECT Comentario FROM ValidacionPlan WHERE IdPlanFamiliar = ? ORDER BY IdValidacion DESC LIMIT 1";
-                                try (PreparedStatement psC = conn.prepareStatement(commentSql)) {
-                                    psC.setInt(1, idVal);
-                                    try (ResultSet rsC = psC.executeQuery()) {
-                                        if (rsC.next()) item.put("comentary", rsC.getString("Comentario"));
-                                    }
-                                }
-                            }
-                        }
+                    Map<String, Object> item = planFamiliarDAO.getPlanById(idVal);
+                    if (item != null && !item.isEmpty()) {
+                        ResponseUtil.sendSuccess(resp, item);
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan familiar no encontrado");
                     }
-                    resp.getWriter().write(gson.toJson(Map.of("data", item)));
                     return;
                 }
             }
@@ -646,111 +322,20 @@ public class PlanDetailsServlet extends HttpServlet {
             if (servletPath.contains("members")) {
                 if (pathInfo != null && pathInfo.startsWith("/familyPlan/select/")) {
                     int familyPlanId = Integer.parseInt(pathInfo.substring(19));
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = "SELECT IdIntegrante, Nombre, Apellido FROM Integrante WHERE IdPlanFamiliar = ?";
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, familyPlanId);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                Map<String, Object> member = new HashMap<>();
-                                member.put("id", rs.getInt("IdIntegrante"));
-                                member.put("full_name", rs.getString("Nombre") + " " + rs.getString("Apellido"));
-                                list.add(member);
-                            }
-                        }
-                    }
+                    List<Map<String, Object>> list = integranteDAO.getMembersForSelect(familyPlanId);
                     resp.getWriter().write(gson.toJson(Map.of("data", list)));
                     return;
 
                 } else if (pathInfo != null && pathInfo.startsWith("/familyPlan/")) {
                     int familyPlanId = Integer.parseInt(pathInfo.substring(12));
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = """
-                        SELECT i.IdIntegrante, i.Nombre, i.Apellido, i.Parentesco, i.Telefono, i.IdGenero, i.IdDocumentoTipo, i.IdNacionalidad,
-                               g.Nombre AS GeneroNombre, dt.Nombre AS DocumentoNombre, n.Nombre AS NacionalidadNombre
-                        FROM Integrante i
-                        LEFT JOIN Genero g ON i.IdGenero = g.IdGenero
-                        LEFT JOIN DocumentoTipo dt ON i.IdDocumentoTipo = dt.IdDocumentoTipo
-                        LEFT JOIN Nacionalidad n ON i.IdNacionalidad = n.IdNacionalidad
-                        WHERE i.IdPlanFamiliar = ?
-                        """;
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, familyPlanId);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                int memberId = rs.getInt("IdIntegrante");
-                                Map<String, Object> member = new HashMap<>();
-                                member.put("id", memberId);
-                                member.put("names", rs.getString("Nombre"));
-                                member.put("last_names", rs.getString("Apellido"));
-                                member.put("full_name", rs.getString("Nombre") + " " + rs.getString("Apellido"));
-                                member.put("relationship", rs.getString("Parentesco"));
-                                member.put("phone", rs.getString("Telefono"));
-                                member.put("gender", Map.of("name", rs.getString("GeneroNombre") != null ? rs.getString("GeneroNombre") : ""));
-                                member.put("document_type", Map.of("acronym", rs.getString("DocumentoNombre") != null ? rs.getString("DocumentoNombre") : ""));
-                                member.put("nationality", Map.of("name", rs.getString("NacionalidadNombre") != null ? rs.getString("NacionalidadNombre") : ""));
-                                
-                                Map<String, Object> extra = extraData.getOrDefault("member_" + memberId, Map.of());
-                                member.put("blood_group", extra.getOrDefault("blood_group", "O+"));
-                                member.put("eps", extra.getOrDefault("eps", "Compensar"));
-                                member.put("birth_date", extra.getOrDefault("birth_date", "1990-01-01"));
-                                member.put("document_number", extra.getOrDefault("document_number", "1000000" + memberId));
-                                member.put("kinship", rs.getString("Parentesco"));
-                                list.add(member);
-                            }
-                        }
-                    }
+                    List<Map<String, Object>> list = integranteDAO.getMembersByFamilyPlan(familyPlanId);
                     resp.getWriter().write(gson.toJson(Map.of("data", list)));
                     return;
 
                 } else if (pathInfo != null && !pathInfo.equals("/")) {
                     // SINGLE MEMBER BY ID
                     int idVal = Integer.parseInt(pathInfo.substring(1));
-                    String sql = """
-                        SELECT i.IdIntegrante, i.Nombre, i.Apellido, i.Parentesco, i.Telefono, i.IdGenero, i.IdDocumentoTipo, i.IdNacionalidad,
-                               g.Nombre AS GeneroNombre, dt.Nombre AS DocumentoNombre, n.Nombre AS NacionalidadNombre
-                        FROM Integrante i
-                        LEFT JOIN Genero g ON i.IdGenero = g.IdGenero
-                        LEFT JOIN DocumentoTipo dt ON i.IdDocumentoTipo = dt.IdDocumentoTipo
-                        LEFT JOIN Nacionalidad n ON i.IdNacionalidad = n.IdNacionalidad
-                        WHERE i.IdIntegrante = ?
-                        """;
-                    Map<String, Object> member = new HashMap<>();
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, idVal);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) {
-                                member.put("id", rs.getInt("IdIntegrante"));
-                                member.put("names", rs.getString("Nombre"));
-                                member.put("last_names", rs.getString("Apellido"));
-                                member.put("relationship", rs.getString("Parentesco"));
-                                member.put("phone", rs.getString("Telefono"));
-                                member.put("gender_id", rs.getInt("IdGenero"));
-                                member.put("document_type_id", rs.getInt("IdDocumentoTipo"));
-                                member.put("nationality_id", rs.getInt("IdNacionalidad"));
-                                member.put("gender", Map.of("name", rs.getString("GeneroNombre") != null ? rs.getString("GeneroNombre") : ""));
-                                member.put("document_type", Map.of("acronym", rs.getString("DocumentoNombre") != null ? rs.getString("DocumentoNombre") : ""));
-                                member.put("nationality", Map.of("name", rs.getString("NacionalidadNombre") != null ? rs.getString("NacionalidadNombre") : ""));
-                                member.put("kinship", Map.of("name", rs.getString("Parentesco") != null ? rs.getString("Parentesco") : ""));
-                                
-                                Map<String, Object> extra = extraData.getOrDefault("member_" + idVal, Map.of());
-                                int bloodGroupId = 1;
-                                Object bgIdObj = extra.get("blood_group_id");
-                                if (bgIdObj instanceof Number) bloodGroupId = ((Number) bgIdObj).intValue();
-                                else if (bgIdObj instanceof String) bloodGroupId = Integer.parseInt((String) bgIdObj);
-
-                                member.put("blood_group_id", bloodGroupId);
-                                member.put("blood_group", Map.of("name", extra.getOrDefault("blood_group", "O+")));
-                                member.put("eps", extra.getOrDefault("eps", "Compensar"));
-                                member.put("birth_date", extra.getOrDefault("birth_date", "1990-01-01"));
-                                member.put("document_number", extra.getOrDefault("document_number", "1000000" + idVal));
-                                member.put("kinship_id", 1);
-                            }
-                        }
-                    }
+                    Map<String, Object> member = integranteDAO.getMemberById(idVal);
                     resp.getWriter().write(gson.toJson(Map.of("data", member)));
                     return;
                 }
@@ -758,18 +343,7 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // FAMILY MEMBERS (SUPERVISOR BULK ACCESS)
             if (servletPath.contains("familyMembers")) {
-                List<Map<String, Object>> list = new ArrayList<>();
-                String sql = "SELECT IdIntegrante, IdPlanFamiliar FROM Integrante";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql);
-                     ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        list.add(Map.of(
-                            "member_id", rs.getInt("IdIntegrante"),
-                            "family_plan_id", rs.getInt("IdPlanFamiliar")
-                        ));
-                    }
-                }
+                List<Map<String, Object>> list = integranteDAO.getAllFamilyMembers();
                 resp.getWriter().write(gson.toJson(Map.of("data", list)));
                 return;
             }
@@ -902,119 +476,25 @@ public class PlanDetailsServlet extends HttpServlet {
             if (servletPath.contains("riskFactors")) {
                 if (pathInfo != null && pathInfo.startsWith("/familyPlan/select/")) {
                     int planId = Integer.parseInt(pathInfo.substring(19));
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = """
-                        SELECT f.IdFactorRiesgo, t.Nombre AS AmenazaNombre, f.Ubicacion
-                        FROM FactorRiesgo f
-                        JOIN TipoAmenaza t ON f.IdTipoAmenaza = t.IdTipoAmenaza
-                        WHERE f.IdPlanFamiliar = ?
-                        """;
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, planId);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                Map<String, Object> risk = new HashMap<>();
-                                risk.put("id", rs.getInt("IdFactorRiesgo"));
-                                risk.put("name", rs.getString("AmenazaNombre") + " - " + rs.getString("Ubicacion"));
-                                list.add(risk);
-                            }
-                        }
-                    }
+                    List<Map<String, Object>> list = vulnerabilidadDAO.getRiskFactorsForSelect(planId);
                     resp.getWriter().write(gson.toJson(Map.of("data", list)));
                     return;
 
                 } else if (pathInfo != null && pathInfo.startsWith("/familyPlan/")) {
                     int planId = Integer.parseInt(pathInfo.substring(12));
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = """
-                        SELECT f.IdFactorRiesgo, f.IdTipoAmenaza, f.Ubicacion, f.AccionReduccion, t.Nombre AS AmenazaNombre
-                        FROM FactorRiesgo f
-                        JOIN TipoAmenaza t ON f.IdTipoAmenaza = t.IdTipoAmenaza
-                        WHERE f.IdPlanFamiliar = ?
-                        """;
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, planId);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                Map<String, Object> risk = new HashMap<>();
-                                int riskId = rs.getInt("IdFactorRiesgo");
-                                String amenazaNombre = rs.getString("AmenazaNombre");
-                                risk.put("id", riskId);
-                                risk.put("threat_type_id", rs.getInt("IdTipoAmenaza"));
-                                risk.put("threat_type_name", amenazaNombre);
-                                risk.put("threat_type", Map.of("id", rs.getInt("IdTipoAmenaza"), "name", amenazaNombre));
-                                risk.put("ubication", rs.getString("Ubicacion"));
-
-                                // Load extra fields from cache (description, distance, basic_reduction_action)
-                                Map<String, Object> extra = extraData.getOrDefault("risk_" + riskId, Map.of());
-                                risk.put("description", extra.getOrDefault("description", rs.getString("AccionReduccion") != null ? rs.getString("AccionReduccion") : ""));
-                                risk.put("distance", extra.getOrDefault("distance", ""));
-
-                                risk.put("family_plan_id", planId);
-                                list.add(risk);
-                            }
-                        }
-                    }
+                    List<Map<String, Object>> list = vulnerabilidadDAO.getRiskFactorsByPlan(planId);
                     resp.getWriter().write(gson.toJson(Map.of("data", list)));
                     return;
 
                 } else if (pathInfo != null && !pathInfo.equals("/")) {
                     int idVal = Integer.parseInt(pathInfo.substring(1));
-                    String sql = """
-                        SELECT f.IdFactorRiesgo, f.IdTipoAmenaza, f.Ubicacion, f.AccionReduccion, t.Nombre AS AmenazaNombre
-                        FROM FactorRiesgo f
-                        JOIN TipoAmenaza t ON f.IdTipoAmenaza = t.IdTipoAmenaza
-                        WHERE f.IdFactorRiesgo = ?
-                        """;
-                    Map<String, Object> risk = new HashMap<>();
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, idVal);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) {
-                                String amenazaNombre = rs.getString("AmenazaNombre");
-                                risk.put("id", rs.getInt("IdFactorRiesgo"));
-                                risk.put("threat_type_id", rs.getInt("IdTipoAmenaza"));
-                                risk.put("threat_type_name", amenazaNombre);
-                                risk.put("threat_type", Map.of("id", rs.getInt("IdTipoAmenaza"), "name", amenazaNombre));
-                                risk.put("ubication", rs.getString("Ubicacion"));
-
-                                // Load extra fields from cache
-                                Map<String, Object> extra = extraData.getOrDefault("risk_" + idVal, Map.of());
-                                risk.put("description", extra.getOrDefault("description", rs.getString("AccionReduccion") != null ? rs.getString("AccionReduccion") : ""));
-                                risk.put("distance", extra.getOrDefault("distance", ""));
-                            }
-                        }
-                    }
+                    Map<String, Object> risk = vulnerabilidadDAO.getRiskFactorById(idVal);
                     resp.getWriter().write(gson.toJson(Map.of("data", risk)));
                     return;
 
                 } else {
                     // LIST ALL RISK FACTORS
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = """
-                        SELECT f.IdFactorRiesgo, f.IdPlanFamiliar, f.IdTipoAmenaza, f.Ubicacion, t.Nombre AS AmenazaNombre
-                        FROM FactorRiesgo f
-                        JOIN TipoAmenaza t ON f.IdTipoAmenaza = t.IdTipoAmenaza
-                        """;
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql);
-                         ResultSet rs = ps.executeQuery()) {
-                        while (rs.next()) {
-                            int threatTypeId = rs.getInt("IdTipoAmenaza");
-                            String threatTypeName = rs.getString("AmenazaNombre");
-                            Map<String, Object> risk = new HashMap<>();
-                            risk.put("id", rs.getInt("IdFactorRiesgo"));
-                            risk.put("family_plan_id", rs.getInt("IdPlanFamiliar"));
-                            risk.put("threat_type_id", threatTypeId);
-                            risk.put("threat_type_name", threatTypeName);
-                            risk.put("threat_type", Map.of("id", threatTypeId, "name", threatTypeName != null ? threatTypeName : ""));
-                            risk.put("ubication", rs.getString("Ubicacion"));
-                            list.add(risk);
-                        }
-                    }
+                    List<Map<String, Object>> list = vulnerabilidadDAO.getAllRiskFactors();
                     resp.getWriter().write(gson.toJson(Map.of("data", list)));
                     return;
                 }
@@ -1024,52 +504,13 @@ public class PlanDetailsServlet extends HttpServlet {
             if (servletPath.contains("vulnerabilityFactors")) {
                 if (pathInfo != null && pathInfo.startsWith("/riskFactor/")) {
                     int riskId = Integer.parseInt(pathInfo.substring(12));
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = """
-                        SELECT v.IdVulnerabilidad, v.IdTipoVulnerabilidad, v.Grado, vt.Nombre AS VulnNombre
-                        FROM Vulnerabilidad v
-                        JOIN VulnerabilidadTipo vt ON v.IdTipoVulnerabilidad = vt.IdTipoVulnerabilidad
-                        WHERE v.IdFactorRiesgo = ?
-                        """;
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, riskId);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                Map<String, Object> item = new HashMap<>();
-                                item.put("id", rs.getInt("IdVulnerabilidad"));
-                                item.put("vulnerability", Map.of("name", rs.getString("VulnNombre")));
-                                item.put("vulnerability_grade", Map.of("name", rs.getString("Grado") != null ? rs.getString("Grado") : ""));
-                                list.add(item);
-                            }
-                        }
-                    }
+                    List<Map<String, Object>> list = vulnerabilidadDAO.getVulnerabilitiesByRiskFactor(riskId);
                     resp.getWriter().write(gson.toJson(Map.of("data", list)));
                     return;
 
                 } else if (pathInfo != null && !pathInfo.equals("/")) {
                     int idVal = Integer.parseInt(pathInfo.substring(1));
-                    String sql = """
-                        SELECT v.IdVulnerabilidad, v.IdFactorRiesgo, v.IdTipoVulnerabilidad, v.Grado, vt.Nombre AS VulnNombre
-                        FROM Vulnerabilidad v
-                        JOIN VulnerabilidadTipo vt ON v.IdTipoVulnerabilidad = vt.IdTipoVulnerabilidad
-                        WHERE v.IdVulnerabilidad = ?
-                        """;
-                    Map<String, Object> item = new HashMap<>();
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, idVal);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) {
-                                item.put("id", rs.getInt("IdVulnerabilidad"));
-                                item.put("vulnerability_id", rs.getInt("IdTipoVulnerabilidad"));
-                                item.put("vulnerability", Map.of("name", rs.getString("VulnNombre")));
-                                item.put("vulnerability_grade_id", 1);
-                                item.put("vulnerability_grade", Map.of("name", rs.getString("Grado") != null ? rs.getString("Grado") : ""));
-                                item.put("risk_factor_id", rs.getInt("IdFactorRiesgo"));
-                            }
-                        }
-                    }
+                    Map<String, Object> item = vulnerabilidadDAO.getVulnerabilityById(idVal);
                     resp.getWriter().write(gson.toJson(Map.of("data", item)));
                     return;
                 }
@@ -1422,157 +863,64 @@ public class PlanDetailsServlet extends HttpServlet {
                 if (answerObj instanceof Boolean) answer = (Boolean) answerObj;
                 else if (answerObj instanceof String) answer = Boolean.parseBoolean((String) answerObj);
 
-                try (Connection conn = DatabaseConfig.getConnection()) {
-                    int existingId = 0;
-                    String checkSql = "SELECT IdRespuestaPlan FROM RespuestaPlan WHERE IdPregunta = ? AND IdPlanFamiliar = ?";
-                    try (PreparedStatement checkPs = conn.prepareStatement(checkSql)) {
-                        checkPs.setInt(1, questionId);
-                        checkPs.setInt(2, planId);
-                        try (ResultSet rs = checkPs.executeQuery()) {
-                            if (rs.next()) {
-                                existingId = rs.getInt(1);
-                            }
-                        }
-                    }
-
-                    if (existingId > 0) {
-                        String updateSql = "UPDATE RespuestaPlan SET Valor = ? WHERE IdRespuestaPlan = ?";
-                        try (PreparedStatement updatePs = conn.prepareStatement(updateSql)) {
-                            updatePs.setBoolean(1, answer);
-                            updatePs.setInt(2, existingId);
-                            updatePs.executeUpdate();
-                        }
+                try {
+                    boolean success = vulnerabilidadDAO.saveOrUpdateVulnerableTestAnswer(planId, questionId, answer);
+                    if (success) {
+                        resp.setStatus(HttpServletResponse.SC_CREATED);
+                        resp.getWriter().write("{\"success\":true,\"message\":\"Respuesta guardada exitosamente\"}");
                     } else {
-                        String insertSql = "INSERT INTO RespuestaPlan (IdPregunta, IdPlanFamiliar, Valor) VALUES (?, ?, ?)";
-                        try (PreparedStatement insertPs = conn.prepareStatement(insertSql)) {
-                            insertPs.setInt(1, questionId);
-                            insertPs.setInt(2, planId);
-                            insertPs.setBoolean(3, answer);
-                            insertPs.executeUpdate();
-                        }
+                        resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                        resp.getWriter().write("{\"success\":false,\"message\":\"No se pudo guardar la respuesta\"}");
                     }
                 } catch (SQLException e) {
                     resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
                     resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos\"}");
                     e.printStackTrace();
-                    return;
                 }
-                resp.setStatus(HttpServletResponse.SC_CREATED);
-                resp.getWriter().write("{\"success\":true,\"message\":\"Respuesta guardada exitosamente\"}");
                 return;
             }
 
             // POST /api/familyPlans
             if (servletPath.contains("familyPlans")) {
                 String lastNames = (String) body.get("last_names");
-                Object userIdObj = body.get("user_id");
-                int userId = 1;
-                if (userIdObj instanceof Number) userId = ((Number) userIdObj).intValue();
-                else if (userIdObj instanceof String) userId = Integer.parseInt((String) userIdObj);
 
-                int familyId = 0;
-                try (Connection conn = DatabaseConfig.getConnection()) {
-                    String sqlFam = "INSERT INTO Familia (Nombre) VALUES (?)";
-                    try (PreparedStatement ps = conn.prepareStatement(sqlFam, Statement.RETURN_GENERATED_KEYS)) {
-                        ps.setString(1, "Familia " + lastNames);
-                        ps.executeUpdate();
-                        try (ResultSet rs = ps.getGeneratedKeys()) {
-                            if (rs.next()) familyId = rs.getInt(1);
-                        }
-                    }
-
-                    String sqlPlan = "INSERT INTO PlanFamiliar (IdFamilia, IdUsuario, Fecha, Estado) VALUES (?, ?, ?, '1')";
-                    try (PreparedStatement ps = conn.prepareStatement(sqlPlan, Statement.RETURN_GENERATED_KEYS)) {
-                        ps.setInt(1, familyId);
-                        ps.setInt(2, userId);
-                        ps.setDate(3, Date.valueOf(LocalDate.now()));
-                        ps.executeUpdate();
-                        try (ResultSet rs = ps.getGeneratedKeys()) {
-                            if (rs.next()) {
-                                int planId = rs.getInt(1);
-
-                                // Save extra location metadata to memory
-                                Map<String, Object> extra = new HashMap<>();
-                                extra.put("zone_id", body.get("zone_id"));
-                                extra.put("city_id", body.get("city_id"));
-                                extraData.put("plan_" + planId, extra);
-
-                                resp.setStatus(HttpServletResponse.SC_CREATED);
-                                resp.getWriter().write(String.format("{\"success\":true,\"message\":\"Plan familiar creado con exito\",\"data\":{\"id\":%d}}", planId));
-                                return;
-                            }
-                        }
+                jakarta.servlet.http.HttpSession session = req.getSession();
+                Integer loggedInUserId = (Integer) session.getAttribute("userId");
+                int userId;
+                if (loggedInUserId != null) {
+                    userId = loggedInUserId;
+                } else {
+                    Object userIdObj = body.get("user_id");
+                    if (userIdObj instanceof Number) {
+                        userId = ((Number) userIdObj).intValue();
+                    } else if (userIdObj instanceof String) {
+                        userId = Integer.parseInt((String) userIdObj);
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_UNAUTHORIZED, "Usuario no autenticado");
+                        return;
                     }
                 }
+
+                int planId = planFamiliarDAO.createFamilyPlan(lastNames, userId, body);
+                if (planId > 0) {
+                    ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, Map.of("id", planId), "Plan familiar creado con exito");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al crear el plan familiar");
+                }
+                return;
             }
 
             // POST /api/members/{familyPlanId}
             if (servletPath.contains("members")) {
                 int familyPlanId = Integer.parseInt(pathInfo.substring(1));
-                String names = (String) body.get("names");
-                String lastNames = (String) body.get("last_names");
-                String relationship = (String) body.get("relationship");
-                String phone = (String) body.get("phone");
-
-                Object genderObj = body.get("gender_id");
-                int genderId = 1;
-                if (genderObj instanceof Number) genderId = ((Number) genderObj).intValue();
-
-                Object docTypeObj = body.get("document_type_id");
-                int docTypeId = 1;
-                if (docTypeObj instanceof Number) docTypeId = ((Number) docTypeObj).intValue();
-
-                Object natObj = body.get("nationality_id");
-                int natId = 1;
-                if (natObj instanceof Number) natId = ((Number) natObj).intValue();
-
-                String sql = "INSERT INTO Integrante (IdPlanFamiliar, Nombre, Apellido, Parentesco, Telefono, IdGenero, IdDocumentoTipo, IdNacionalidad) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-                    ps.setInt(1, familyPlanId);
-                    ps.setString(2, names);
-                    ps.setString(3, lastNames);
-                    ps.setString(4, relationship != null ? relationship : "Familiar");
-                    ps.setString(5, phone != null ? phone : "");
-                    ps.setInt(6, genderId);
-                    ps.setInt(7, docTypeId);
-                    ps.setInt(8, natId);
-                    ps.executeUpdate();
-                    try (ResultSet rs = ps.getGeneratedKeys()) {
-                        if (rs.next()) {
-                            int memberId = rs.getInt(1);
-
-                            // Save extra unmapped fields to memory
-                            Map<String, Object> extra = new HashMap<>();
-                            extra.put("eps", body.get("eps"));
-                            extra.put("birth_date", body.get("birth_date"));
-                            extra.put("document_number", body.get("document_number"));
-
-                            Object bgIdObj = body.get("blood_group_id");
-                            int bgId = 1;
-                            if (bgIdObj instanceof Number) bgId = ((Number) bgIdObj).intValue();
-                            else if (bgIdObj instanceof String) bgId = Integer.parseInt((String) bgIdObj);
-
-                            String bgName = "O+";
-                            if (bgId == 1) bgName = "O+";
-                            else if (bgId == 2) bgName = "O-";
-                            else if (bgId == 3) bgName = "A+";
-                            else if (bgId == 4) bgName = "A-";
-                            else if (bgId == 5) bgName = "B+";
-                            else if (bgId == 6) bgName = "B-";
-                            else if (bgId == 7) bgName = "AB+";
-                            else if (bgId == 8) bgName = "AB-";
-                            extra.put("blood_group", bgName);
-                            extra.put("blood_group_id", bgId);
-
-                            extraData.put("member_" + memberId, extra);
-
-                            resp.setStatus(HttpServletResponse.SC_CREATED);
-                            resp.getWriter().write(String.format("{\"success\":true,\"message\":\"Integrante agregado exitosamente\",\"data\":{\"id\":%d}}", memberId));
-                            return;
-                        }
-                    }
+                int memberId = integranteDAO.addMember(familyPlanId, body);
+                if (memberId > 0) {
+                    resp.setStatus(HttpServletResponse.SC_CREATED);
+                    resp.getWriter().write(String.format("{\"success\":true,\"message\":\"Integrante agregado exitosamente\",\"data\":{\"id\":%d}}", memberId));
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al agregar integrante");
                 }
+                return;
             }
 
             // POST /api/conditionMembers
@@ -1644,48 +992,20 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // POST /api/riskFactors
             if (servletPath.contains("riskFactors")) {
-                Object threatObj = body.get("threat_type_id");
-                int threatId = 1;
-                if (threatObj instanceof Number) threatId = ((Number) threatObj).intValue();
-                else if (threatObj instanceof String) threatId = Integer.parseInt((String) threatObj);
-
-                // Frontend sends 'ubication'; fallback to 'location'
-                String ubicacion = body.containsKey("ubication") ? (String) body.get("ubication") : (String) body.get("location");
-                String description = (String) body.get("description");
-                String distanceStr = body.get("distance") != null ? String.valueOf(body.get("distance")) : "";
-
-                Object planIdObj = body.get("family_plan_id");
-                int planId = 1;
-                if (planIdObj instanceof Number) planId = ((Number) planIdObj).intValue();
-                else if (planIdObj instanceof String) planId = Integer.parseInt((String) planIdObj);
-
-                // Store description in AccionReduccion column (best available fit)
-                String accionReduccion = description != null && !description.isEmpty() ? description : "Sin descripción";
-
-                String sql = "INSERT INTO FactorRiesgo (IdPlanFamiliar, IdTipoAmenaza, Ubicacion, AccionReduccion) VALUES (?, ?, ?, ?)";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-                    ps.setInt(1, planId);
-                    ps.setInt(2, threatId);
-                    ps.setString(3, ubicacion != null ? ubicacion : "");
-                    ps.setString(4, accionReduccion);
-                    ps.executeUpdate();
-
-                    int generatedId = 0;
-                    try (ResultSet rs = ps.getGeneratedKeys()) {
-                        if (rs.next()) generatedId = rs.getInt(1);
-                    }
+                try {
+                    int generatedId = vulnerabilidadDAO.addRiskFactor(body);
                     if (generatedId > 0) {
-                        Map<String, Object> extra = new HashMap<>();
-                        extra.put("description", description != null ? description : "");
-                        extra.put("distance", distanceStr);
-                        extraData.put("risk_" + generatedId, extra);
+                        resp.setStatus(HttpServletResponse.SC_CREATED);
+                        resp.getWriter().write("{\"success\":true,\"message\":\"Factor de riesgo agregado exitosamente\"}");
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al agregar factor de riesgo");
                     }
-
-                    resp.setStatus(HttpServletResponse.SC_CREATED);
-                    resp.getWriter().write("{\"success\":true,\"message\":\"Factor de riesgo agregado exitosamente\"}");
-                    return;
+                } catch (SQLException e) {
+                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                    resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos\"}");
+                    e.printStackTrace();
                 }
+                return;
             }
 
             // POST /api/availableResources
@@ -1754,33 +1074,20 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // POST /api/vulnerabilityFactors
             if (servletPath.contains("vulnerabilityFactors")) {
-                Object vulnIdObj = body.get("vulnerability_id");
-                int vulnId = 1;
-                if (vulnIdObj instanceof Number) vulnId = ((Number) vulnIdObj).intValue();
-                else if (vulnIdObj instanceof String && !((String) vulnIdObj).isEmpty()) vulnId = Integer.parseInt((String) vulnIdObj);
-
-                Object gradeObj = body.get("vulnerability_grade_id");
-                int gradeId = 1;
-                if (gradeObj instanceof Number) gradeId = ((Number) gradeObj).intValue();
-                else if (gradeObj instanceof String && !((String) gradeObj).isEmpty()) gradeId = Integer.parseInt((String) gradeObj);
-                String gradeStr = (gradeId == 1) ? "Bajo" : (gradeId == 2 ? "Medio" : "Alto");
-
-                Object riskIdObj = body.get("risk_factor_id");
-                int riskId = 1;
-                if (riskIdObj instanceof Number) riskId = ((Number) riskIdObj).intValue();
-                else if (riskIdObj instanceof String && !((String) riskIdObj).isEmpty()) riskId = Integer.parseInt((String) riskIdObj);
-
-                String sql = "INSERT INTO Vulnerabilidad (IdFactorRiesgo, IdTipoVulnerabilidad, Grado) VALUES (?, ?, ?)";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setInt(1, riskId);
-                    ps.setInt(2, vulnId);
-                    ps.setString(3, gradeStr);
-                    ps.executeUpdate();
-                    resp.setStatus(HttpServletResponse.SC_CREATED);
-                    resp.getWriter().write("{\"success\":true,\"message\":\"Vulnerabilidad agregada exitosamente\"}");
-                    return;
+                try {
+                    boolean success = vulnerabilidadDAO.addVulnerability(body);
+                    if (success) {
+                        resp.setStatus(HttpServletResponse.SC_CREATED);
+                        resp.getWriter().write("{\"success\":true,\"message\":\"Vulnerabilidad agregada exitosamente\"}");
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al agregar vulnerabilidad");
+                    }
+                } catch (SQLException e) {
+                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                    resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos\"}");
+                    e.printStackTrace();
                 }
+                return;
             }
 
             // POST /api/riskReductionActions (Save in memory store)
@@ -2008,62 +1315,13 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // PUT /api/members/{id}
             if (servletPath.contains("members")) {
-                String names = (String) body.get("names");
-                String lastNames = (String) body.get("last_names");
-                String relationship = (String) body.get("relationship");
-                String phone = (String) body.get("phone");
-
-                Object genderObj = body.get("gender_id");
-                int genderId = 1;
-                if (genderObj instanceof Number) genderId = ((Number) genderObj).intValue();
-
-                Object docTypeObj = body.get("document_type_id");
-                int docTypeId = 1;
-                if (docTypeObj instanceof Number) docTypeId = ((Number) docTypeObj).intValue();
-
-                Object natObj = body.get("nationality_id");
-                int natId = 1;
-                if (natObj instanceof Number) natId = ((Number) natObj).intValue();
-
-                String sql = "UPDATE Integrante SET Nombre = ?, Apellido = ?, Parentesco = ?, Telefono = ?, IdGenero = ?, IdDocumentoTipo = ?, IdNacionalidad = ? WHERE IdIntegrante = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setString(1, names);
-                    ps.setString(2, lastNames);
-                    ps.setString(3, relationship != null ? relationship : "Familiar");
-                    ps.setString(4, phone != null ? phone : "");
-                    ps.setInt(5, genderId);
-                    ps.setInt(6, docTypeId);
-                    ps.setInt(7, natId);
-                    ps.setInt(8, idVal);
-                    ps.executeUpdate();
-
-                    // Save extra unmapped fields to memory
-                    Map<String, Object> extra = extraData.computeIfAbsent("member_" + idVal, k -> new HashMap<>());
-                    extra.put("eps", body.get("eps"));
-                    extra.put("birth_date", body.get("birth_date"));
-                    extra.put("document_number", body.get("document_number"));
-
-                    Object bgIdObj = body.get("blood_group_id");
-                    int bgId = 1;
-                    if (bgIdObj instanceof Number) bgId = ((Number) bgIdObj).intValue();
-                    else if (bgIdObj instanceof String) bgId = Integer.parseInt((String) bgIdObj);
-
-                    String bgName = "O+";
-                    if (bgId == 1) bgName = "O+";
-                    else if (bgId == 2) bgName = "O-";
-                    else if (bgId == 3) bgName = "A+";
-                    else if (bgId == 4) bgName = "A-";
-                    else if (bgId == 5) bgName = "B+";
-                    else if (bgId == 6) bgName = "B-";
-                    else if (bgId == 7) bgName = "AB+";
-                    else if (bgId == 8) bgName = "AB-";
-                    extra.put("blood_group", bgName);
-                    extra.put("blood_group_id", bgId);
-
+                boolean updated = integranteDAO.updateMember(idVal, body);
+                if (updated) {
                     resp.getWriter().write("{\"success\":true,\"message\":\"Integrante actualizado exitosamente\"}");
-                    return;
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Integrante no encontrado");
                 }
+                return;
             }
 
             // PUT /api/conditionMembers/{id}
@@ -2113,123 +1371,81 @@ public class PlanDetailsServlet extends HttpServlet {
         String pathInfo = req.getPathInfo();
 
         try {
-            BufferedReader reader = req.getReader();
-            Map<String, Object> body = gson.fromJson(reader, Map.class);
-            if (body == null) body = new HashMap<>();
+                BufferedReader reader = req.getReader();
+                Map<String, Object> body = gson.fromJson(reader, Map.class);
+                if (body == null) body = new HashMap<>();
 
-            // PATCH /api/familyPlans/{id}/identify
-            if (servletPath.contains("familyPlans") && pathInfo.endsWith("/identify")) {
-                String[] segments = pathInfo.split("/");
-                int planId = Integer.parseInt(segments[1]);
+                // PATCH /api/familyPlans/{id}/identify
+                if (servletPath.contains("familyPlans") && pathInfo.endsWith("/identify")) {
+                    String[] segments = pathInfo.split("/");
+                    int planId = Integer.parseInt(segments[1]);
 
-                String lastNames = (String) body.get("last_names");
-                String landlinePhone = (String) body.get("landline_phone");
-
-                try (Connection conn = DatabaseConfig.getConnection()) {
-                    // Get Familia ID from PlanFamiliar
-                    int familyId = 0;
-                    String getFamSql = "SELECT IdFamilia FROM PlanFamiliar WHERE IdPlanFamiliar = ?";
-                    try (PreparedStatement ps = conn.prepareStatement(getFamSql)) {
-                        ps.setInt(1, planId);
-                        try (ResultSet rs = ps.executeQuery()) { if (rs.next()) familyId = rs.getInt(1); }
+                    boolean updated = planFamiliarDAO.updateIdentification(planId, body);
+                    if (updated) {
+                        ResponseUtil.sendSuccess(resp, "Datos de identificacion actualizados");
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan familiar no encontrado");
                     }
-
-                    if (familyId > 0) {
-                        String sql = "UPDATE Familia SET Nombre = ?, Telefono = ?, CalidadVivienda = ? WHERE IdFamilia = ?";
-                        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                            ps.setString(1, "Familia " + lastNames);
-                            ps.setString(2, landlinePhone != null ? landlinePhone : "");
-                            ps.setString(3, "propietario"); // Default calidad
-                            ps.setInt(4, familyId);
-                            ps.executeUpdate();
-                        }
-                    }
+                    return;
                 }
 
-                // Save other unmapped fields in memory
-                Map<String, Object> extra = extraData.computeIfAbsent("plan_" + planId, k -> new HashMap<>());
-                extra.put("zone_id", body.get("zone_id"));
-                extra.put("department_id", body.get("department_id"));
-                extra.put("city_id", body.get("city_id"));
-                extra.put("address", body.get("address"));
-                extra.put("sector_id", body.get("sector_id"));
-                extra.put("sector_name", body.get("sector_name"));
-                extra.put("housing_quality_id", body.get("housing_quality_id"));
+                // PATCH /api/familyPlans/{id}/change-status
+                if (servletPath.contains("familyPlans") && pathInfo.endsWith("/change-status")) {
+                    String[] segments = pathInfo.split("/");
+                    int planId = Integer.parseInt(segments[1]);
 
-                resp.getWriter().write("{\"success\":true,\"message\":\"Datos de identificacion actualizados\"}");
-                return;
-            }
+                    Object statusObj = body.get("status_plan_id");
+                    int statusId = 1;
+                    if (statusObj instanceof Number) statusId = ((Number) statusObj).intValue();
 
-            // PATCH /api/familyPlans/{id}/change-status
-            if (servletPath.contains("familyPlans") && pathInfo.endsWith("/change-status")) {
-                String[] segments = pathInfo.split("/");
-                int planId = Integer.parseInt(segments[1]);
-
-                Object statusObj = body.get("status_plan_id");
-                int statusId = 1;
-                if (statusObj instanceof Number) statusId = ((Number) statusObj).intValue();
-
-                String sql = "UPDATE PlanFamiliar SET Estado = ? WHERE IdPlanFamiliar = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setString(1, String.valueOf(statusId));
-                    ps.setInt(2, planId);
-                    ps.executeUpdate();
-
-                    // If commentary is present (rejected with changes), save to ValidacionPlan
                     String comment = (String) body.get("comentary");
-                    if (comment != null) {
-                        String valSql = "INSERT INTO ValidacionPlan (IdPlanFamiliar, IdSupervisor, Fecha, Estado, Comentario) VALUES (?, 2, ?, ?, ?)";
-                        try (PreparedStatement psV = conn.prepareStatement(valSql)) {
-                            psV.setInt(1, planId);
-                            psV.setDate(2, Date.valueOf(LocalDate.now()));
-                            psV.setString(3, "Rechazado");
-                            psV.setString(4, comment);
-                            psV.executeUpdate();
-                        }
+
+                    boolean updated = planFamiliarDAO.changeStatus(planId, statusId, comment);
+                    if (updated) {
+                        ResponseUtil.sendSuccess(resp, "Estado de plan actualizado exitosamente");
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan familiar no encontrado");
                     }
+                    return;
                 }
-                resp.getWriter().write("{\"success\":true,\"message\":\"Estado de plan actualizado exitosamente\"}");
-                return;
-            }
 
-            // PATCH /api/familyPlans/{id}/change-family-type
-            if (servletPath.contains("familyPlans") && pathInfo.endsWith("/change-family-type")) {
-                String[] segments = pathInfo.split("/");
-                int planId = Integer.parseInt(segments[1]);
+                // PATCH /api/familyPlans/{id}/change-family-type
+                if (servletPath.contains("familyPlans") && pathInfo.endsWith("/change-family-type")) {
+                    String[] segments = pathInfo.split("/");
+                    int planId = Integer.parseInt(segments[1]);
 
-                Object ftIdObj = body.get("family_type_id");
-                int familyTypeId = 3;
-                if (ftIdObj instanceof Number) familyTypeId = ((Number) ftIdObj).intValue();
-                else if (ftIdObj instanceof String) familyTypeId = Integer.parseInt((String) ftIdObj);
+                    Object ftIdObj = body.get("family_type_id");
+                    int familyTypeId = 3;
+                    if (ftIdObj instanceof Number) familyTypeId = ((Number) ftIdObj).intValue();
+                    else if (ftIdObj instanceof String) familyTypeId = Integer.parseInt((String) ftIdObj);
 
-                Map<String, Object> extra = extraData.computeIfAbsent("plan_" + planId, k -> new HashMap<>());
-                extra.put("family_type_id", familyTypeId);
-
-                resp.getWriter().write("{\"success\":true,\"message\":\"Tipo de familia actualizado exitosamente\"}");
-                return;
-            }
-
-            // PATCH /api/familyPlans/status/{id}
-            if (servletPath.contains("familyPlans") && pathInfo.startsWith("/status/")) {
-                int planId = Integer.parseInt(pathInfo.substring(8));
-                Object statusObj = body.get("status_plan_id");
-                int statusId = 1;
-                if (statusObj instanceof Number) statusId = ((Number) statusObj).intValue();
-
-                String sql = "UPDATE PlanFamiliar SET Estado = ? WHERE IdPlanFamiliar = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setString(1, String.valueOf(statusId));
-                    ps.setInt(2, planId);
-                    ps.executeUpdate();
+                    boolean updated = planFamiliarDAO.changeFamilyType(planId, familyTypeId);
+                    if (updated) {
+                        ResponseUtil.sendSuccess(resp, "Tipo de familia actualizado exitosamente");
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan familiar no encontrado");
+                    }
+                    return;
                 }
-                resp.getWriter().write("{\"success\":true,\"message\":\"Estado de plan actualizado exitosamente\"}");
-                return;
-            }
 
-            // PATCH /api/pets/{id}
-            if (servletPath.contains("pets")) {
+                // PATCH /api/familyPlans/status/{id}
+                if (servletPath.contains("familyPlans") && pathInfo.startsWith("/status/")) {
+                    int planId = Integer.parseInt(pathInfo.substring(8));
+                    Object statusObj = body.get("status_plan_id");
+                    int statusId = 1;
+                    if (statusObj instanceof Number) statusId = ((Number) statusObj).intValue();
+
+                    boolean updated = planFamiliarDAO.changeStatus(planId, statusId, null);
+                    if (updated) {
+                        ResponseUtil.sendSuccess(resp, "Estado de plan actualizado exitosamente");
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan familiar no encontrado");
+                    }
+                    return;
+                }
+
+                // PATCH /api/pets/{id}
+                if (servletPath.contains("pets")) {
                 int petId = Integer.parseInt(pathInfo.substring(1));
                 boolean updated = mascotaDAO.updatePet(petId, body);
                 if (updated) {
@@ -2308,58 +1524,36 @@ public class PlanDetailsServlet extends HttpServlet {
             // PATCH /api/riskFactors/{id}
             if (servletPath.contains("riskFactors")) {
                 int idVal = Integer.parseInt(pathInfo.substring(1));
-                Object threatObj = body.get("threat_type_id");
-                int threatId = 1;
-                if (threatObj instanceof Number) threatId = ((Number) threatObj).intValue();
-                else if (threatObj instanceof String) threatId = Integer.parseInt((String) threatObj);
-
-                // Frontend sends 'ubication' on create but 'location' on edit — support both
-                String ubicacion = body.containsKey("ubication") ? (String) body.get("ubication") : (String) body.get("location");
-                String description = (String) body.get("description");
-                String distanceStr = body.get("distance") != null ? String.valueOf(body.get("distance")) : "";
-
-                String accionReduccion = description != null && !description.isEmpty() ? description : "Sin descripción";
-
-                String sql = "UPDATE FactorRiesgo SET IdTipoAmenaza = ?, Ubicacion = ?, AccionReduccion = ? WHERE IdFactorRiesgo = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setInt(1, threatId);
-                    ps.setString(2, ubicacion != null ? ubicacion : "");
-                    ps.setString(3, accionReduccion);
-                    ps.setInt(4, idVal);
-                    ps.executeUpdate();
+                try {
+                    boolean success = vulnerabilidadDAO.updateRiskFactor(idVal, body);
+                    if (success) {
+                        resp.getWriter().write("{\"success\":true,\"message\":\"Factor de riesgo actualizado exitosamente\"}");
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Factor de riesgo no encontrado");
+                    }
+                } catch (SQLException e) {
+                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                    resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos\"}");
+                    e.printStackTrace();
                 }
-
-                // Update cache with latest description and distance
-                Map<String, Object> extra = extraData.computeIfAbsent("risk_" + idVal, k -> new HashMap<>());
-                extra.put("description", description != null ? description : "");
-                extra.put("distance", distanceStr);
-
-                resp.getWriter().write("{\"success\":true,\"message\":\"Factor de riesgo actualizado exitosamente\"}");
                 return;
             }
 
             // PATCH /api/vulnerabilityFactors/{id}
             if (servletPath.contains("vulnerabilityFactors")) {
                 int idVal = Integer.parseInt(pathInfo.substring(1));
-                Object vulnIdObj = body.get("vulnerability_id");
-                int vulnId = 1;
-                if (vulnIdObj instanceof Number) vulnId = ((Number) vulnIdObj).intValue();
-
-                Object gradeObj = body.get("vulnerability_grade_id");
-                int gradeId = 1;
-                if (gradeObj instanceof Number) gradeId = ((Number) gradeObj).intValue();
-                String gradeStr = (gradeId == 1) ? "Bajo" : (gradeId == 2 ? "Medio" : "Alto");
-
-                String sql = "UPDATE Vulnerabilidad SET IdTipoVulnerabilidad = ?, Grado = ? WHERE IdVulnerabilidad = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setInt(1, vulnId);
-                    ps.setString(2, gradeStr);
-                    ps.setInt(3, idVal);
-                    ps.executeUpdate();
+                try {
+                    boolean success = vulnerabilidadDAO.updateVulnerability(idVal, body);
+                    if (success) {
+                        resp.getWriter().write("{\"success\":true,\"message\":\"Vulnerabilidad actualizada exitosamente\"}");
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Vulnerabilidad no encontrada");
+                    }
+                } catch (SQLException e) {
+                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                    resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos\"}");
+                    e.printStackTrace();
                 }
-                resp.getWriter().write("{\"success\":true,\"message\":\"Vulnerabilidad actualizada exitosamente\"}");
                 return;
             }
 
@@ -2436,18 +1630,12 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // DELETE /api/members/{id}
             if (servletPath.contains("members")) {
-                // Delete related diseases first to respect foreign key constraints
-                try (Connection conn = DatabaseConfig.getConnection()) {
-                    try (PreparedStatement psD = conn.prepareStatement("DELETE FROM Enfermedad WHERE IdIntegrante = ?")) {
-                        psD.setInt(1, idVal);
-                        psD.executeUpdate();
-                    }
-                    try (PreparedStatement ps = conn.prepareStatement("DELETE FROM Integrante WHERE IdIntegrante = ?")) {
-                        ps.setInt(1, idVal);
-                        ps.executeUpdate();
-                    }
+                boolean deleted = integranteDAO.deleteMember(idVal);
+                if (deleted) {
+                    resp.getWriter().write("{\"success\":true,\"message\":\"Integrante eliminado exitosamente\"}");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Integrante no encontrado");
                 }
-                resp.getWriter().write("{\"success\":true,\"message\":\"Integrante eliminado exitosamente\"}");
                 return;
             }
 
@@ -2488,18 +1676,18 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // DELETE /api/riskFactors/{id}
             if (servletPath.contains("riskFactors")) {
-                try (Connection conn = DatabaseConfig.getConnection()) {
-                    // 1. Delete child vulnerabilities first (FK constraint)
-                    try (PreparedStatement ps = conn.prepareStatement("DELETE FROM Vulnerabilidad WHERE IdFactorRiesgo = ?")) {
-                        ps.setInt(1, idVal); ps.executeUpdate();
+                try {
+                    boolean success = vulnerabilidadDAO.deleteRiskFactor(idVal);
+                    if (success) {
+                        resp.getWriter().write("{\"success\":true,\"message\":\"Factor de riesgo eliminado exitosamente\"}");
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Factor de riesgo no encontrado");
                     }
-                    // 2. Delete the risk factor itself
-                    try (PreparedStatement ps = conn.prepareStatement("DELETE FROM FactorRiesgo WHERE IdFactorRiesgo = ?")) {
-                        ps.setInt(1, idVal); ps.executeUpdate();
-                    }
+                } catch (SQLException e) {
+                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                    resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos: " + e.getMessage() + "\"}");
+                    e.printStackTrace();
                 }
-                extraData.remove("risk_" + idVal);
-                resp.getWriter().write("{\"success\":true,\"message\":\"Factor de riesgo eliminado exitosamente\"}");
                 return;
             }
 
@@ -2518,13 +1706,18 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // DELETE /api/vulnerabilityFactors/{id}
             if (servletPath.contains("vulnerabilityFactors")) {
-                String sql = "DELETE FROM Vulnerabilidad WHERE IdVulnerabilidad = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setInt(1, idVal);
-                    ps.executeUpdate();
+                try {
+                    boolean success = vulnerabilidadDAO.deleteVulnerability(idVal);
+                    if (success) {
+                        resp.getWriter().write("{\"success\":true,\"message\":\"Vulnerabilidad eliminada exitosamente\"}");
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Vulnerabilidad no encontrada");
+                    }
+                } catch (SQLException e) {
+                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                    resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos: " + e.getMessage() + "\"}");
+                    e.printStackTrace();
                 }
-                resp.getWriter().write("{\"success\":true,\"message\":\"Vulnerabilidad eliminada exitosamente\"}");
                 return;
             }
 

@@ -72,6 +72,11 @@ public class LoginServlet extends HttpServlet {
             UserServlet.loggedInSectionalId = sectionalId;
             UserServlet.loggedInRoleId = roleId;
 
+            jakarta.servlet.http.HttpSession session = req.getSession(true);
+            session.setAttribute("userId", userId);
+            session.setAttribute("sectionalId", sectionalId);
+            session.setAttribute("roleId", roleId);
+
             String fullName = (String) dbUser.get("Nombre");
             int genderId = (int) dbUser.get("IdGenero");
 
