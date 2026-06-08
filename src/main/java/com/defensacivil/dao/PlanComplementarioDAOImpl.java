@@ -1,6 +1,10 @@
 package com.defensacivil.dao;
 
 import com.defensacivil.config.DatabaseConfig;
+import com.defensacivil.dto.HousingInfoDTO;
+import com.defensacivil.dto.ActionPlanDTO;
+import com.defensacivil.dto.ActionDTO;
+import com.defensacivil.dto.VaccineDTO;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -18,20 +22,21 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
     // --- HOUSING INFO & GRAPHICS ---
 
     @Override
-    public Map<String, Object> getHousingInfo(int planId, int typeId) throws SQLException {
+    public HousingInfoDTO getHousingInfo(int planId, int typeId) throws SQLException {
         int esEntornoVal = (typeId == 2) ? 1 : 0;
-        String sql = "SELECT IdGrafico, RutaImagen FROM GraficoVivienda WHERE IdPlanFamiliar = ? AND EsEntorno = ? LIMIT 1";
+        String sql = "SELECT IdGrafico, RutaImagen, Descripcion FROM GraficoVivienda WHERE IdPlanFamiliar = ? AND EsEntorno = ? LIMIT 1";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, planId);
             ps.setInt(2, esEntornoVal);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("id", rs.getInt("IdGrafico"));
-                    item.put("path", rs.getString("RutaImagen"));
-                    item.put("family_plan_id", planId);
-                    return item;
+                    HousingInfoDTO dto = new HousingInfoDTO();
+                    dto.setId(rs.getInt("IdGrafico"));
+                    dto.setPath(rs.getString("RutaImagen"));
+                    dto.setDescription(rs.getString("Descripcion"));
+                    dto.setFamily_plan_id(planId);
+                    return dto;
                 }
             }
         }
@@ -78,19 +83,20 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
     }
 
     @Override
-    public List<Map<String, Object>> getHousingGraphicsByPlan(int planId) throws SQLException {
-        List<Map<String, Object>> list = new ArrayList<>();
+    public List<HousingInfoDTO> getHousingGraphicsByPlan(int planId) throws SQLException {
+        List<HousingInfoDTO> list = new ArrayList<>();
         String sql = "SELECT IdGrafico, RutaImagen, Descripcion FROM GraficoVivienda WHERE IdPlanFamiliar = ? AND EsEntorno = 0";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, planId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("id", rs.getInt("IdGrafico"));
-                    item.put("path", rs.getString("RutaImagen"));
-                    item.put("description", rs.getString("Descripcion") != null ? rs.getString("Descripcion") : "");
-                    list.add(item);
+                    HousingInfoDTO dto = new HousingInfoDTO();
+                    dto.setId(rs.getInt("IdGrafico"));
+                    dto.setPath(rs.getString("RutaImagen"));
+                    dto.setDescription(rs.getString("Descripcion") != null ? rs.getString("Descripcion") : "");
+                    dto.setFamily_plan_id(planId);
+                    list.add(dto);
                 }
             }
         }
@@ -98,19 +104,19 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
     }
 
     @Override
-    public Map<String, Object> getHousingGraphicById(int id) throws SQLException {
+    public HousingInfoDTO getHousingGraphicById(int id) throws SQLException {
         String sql = "SELECT IdGrafico, RutaImagen, Descripcion, IdPlanFamiliar FROM GraficoVivienda WHERE IdGrafico = ?";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("id", rs.getInt("IdGrafico"));
-                    item.put("path", rs.getString("RutaImagen"));
-                    item.put("description", rs.getString("Descripcion") != null ? rs.getString("Descripcion") : "");
-                    item.put("family_plan_id", rs.getInt("IdPlanFamiliar"));
-                    return item;
+                    HousingInfoDTO dto = new HousingInfoDTO();
+                    dto.setId(rs.getInt("IdGrafico"));
+                    dto.setPath(rs.getString("RutaImagen"));
+                    dto.setDescription(rs.getString("Descripcion") != null ? rs.getString("Descripcion") : "");
+                    dto.setFamily_plan_id(rs.getInt("IdPlanFamiliar"));
+                    return dto;
                 }
             }
         }
@@ -156,18 +162,18 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
     }
 
     @Override
-    public Map<String, Object> getActionPlanByPlan(int planId) throws SQLException {
+    public ActionPlanDTO getActionPlanByPlan(int planId) throws SQLException {
         String sql = "SELECT pa.IdPlanAccion, pa.IdCoordinador FROM PlanAccion pa JOIN FactorRiesgo fr ON pa.IdFactorRiesgo = fr.IdFactorRiesgo WHERE fr.IdPlanFamiliar = ? LIMIT 1";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, planId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("id", rs.getInt("IdPlanAccion"));
-                    item.put("family_plan_id", planId);
-                    item.put("coordinator_id", rs.getInt("IdCoordinador"));
-                    return item;
+                    ActionPlanDTO dto = new ActionPlanDTO();
+                    dto.setId(rs.getInt("IdPlanAccion"));
+                    dto.setFamily_plan_id(planId);
+                    dto.setCoordinator_id(rs.getInt("IdCoordinador"));
+                    return dto;
                 }
             }
         }
@@ -215,24 +221,29 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
     }
 
     @Override
-    public List<Map<String, Object>> getActionsByActionPlan(int actionPlanId) throws SQLException {
-        List<Map<String, Object>> list = new ArrayList<>();
-        String sql = "SELECT a.IdAccion, a.IdResponsable, a.Etapa, a.Descripcion, i.Nombre, i.Apellido FROM Accion a JOIN Integrante i ON a.IdResponsable = i.IdIntegrante WHERE a.IdPlanAccion = ?";
+    public List<ActionDTO> getActionsByActionPlan(int actionPlanId) throws SQLException {
+        List<ActionDTO> list = new ArrayList<>();
+        String sql = "SELECT a.IdAccion, a.IdResponsable, a.Etapa, a.Descripcion, i.Nombre, i.Apellido " +
+                     "FROM Accion a " +
+                     "JOIN Integrante i ON a.IdResponsable = i.IdIntegrante " +
+                     "WHERE a.IdPlanAccion = ?";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, actionPlanId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("id", rs.getInt("IdAccion"));
-                    item.put("description", rs.getString("Descripcion"));
-                    item.put("stage", rs.getString("Etapa"));
-                    item.put("member_id", rs.getInt("IdResponsable"));
-                    item.put("member", Map.of(
-                        "names", rs.getString("Nombre"),
-                        "last_names", rs.getString("Apellido")
-                    ));
-                    list.add(item);
+                    ActionDTO dto = new ActionDTO();
+                    dto.setId(rs.getInt("IdAccion"));
+                    dto.setDescription(rs.getString("Descripcion"));
+                    dto.setStage(rs.getString("Etapa"));
+                    dto.setMember_id(rs.getInt("IdResponsable"));
+
+                    ActionDTO.MemberInfo member = new ActionDTO.MemberInfo();
+                    member.setNames(rs.getString("Nombre"));
+                    member.setLast_names(rs.getString("Apellido"));
+                    dto.setMember(member);
+
+                    list.add(dto);
                 }
             }
         }
@@ -240,23 +251,28 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
     }
 
     @Override
-    public Map<String, Object> getActionById(int id) throws SQLException {
-        String sql = "SELECT a.IdAccion, a.IdResponsable, a.Etapa, a.Descripcion, i.Nombre, i.Apellido FROM Accion a JOIN Integrante i ON a.IdResponsable = i.IdIntegrante WHERE a.IdAccion = ?";
+    public ActionDTO getActionById(int id) throws SQLException {
+        String sql = "SELECT a.IdAccion, a.IdResponsable, a.Etapa, a.Descripcion, i.Nombre, i.Apellido " +
+                     "FROM Accion a " +
+                     "JOIN Integrante i ON a.IdResponsable = i.IdIntegrante " +
+                     "WHERE a.IdAccion = ?";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("id", rs.getInt("IdAccion"));
-                    item.put("description", rs.getString("Descripcion"));
-                    item.put("stage", rs.getString("Etapa"));
-                    item.put("member_id", rs.getInt("IdResponsable"));
-                    item.put("member", Map.of(
-                        "names", rs.getString("Nombre"),
-                        "last_names", rs.getString("Apellido")
-                    ));
-                    return item;
+                    ActionDTO dto = new ActionDTO();
+                    dto.setId(rs.getInt("IdAccion"));
+                    dto.setDescription(rs.getString("Descripcion"));
+                    dto.setStage(rs.getString("Etapa"));
+                    dto.setMember_id(rs.getInt("IdResponsable"));
+
+                    ActionDTO.MemberInfo member = new ActionDTO.MemberInfo();
+                    member.setNames(rs.getString("Nombre"));
+                    member.setLast_names(rs.getString("Apellido"));
+                    dto.setMember(member);
+
+                    return dto;
                 }
             }
         }
@@ -301,8 +317,8 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
     // --- PET VACCINES ---
 
     @Override
-    public List<Map<String, Object>> getVaccinesByPet(int petId) throws SQLException {
-        List<Map<String, Object>> list = new ArrayList<>();
+    public List<VaccineDTO> getVaccinesByPet(int petId) throws SQLException {
+        List<VaccineDTO> list = new ArrayList<>();
         String sql = "SELECT IdVacuna, Nombre FROM Vacunas WHERE IdMascota = ?";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -312,11 +328,13 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
                     int vacId = rs.getInt("IdVacuna");
                     Map<String, Object> extra = extraData.getOrDefault("vaccine_" + vacId, Map.of());
                     String dateVal = (String) extra.getOrDefault("date", java.time.LocalDate.now().toString());
-                    Map<String, Object> vaccine = new HashMap<>();
-                    vaccine.put("id", vacId);
-                    vaccine.put("name", rs.getString("Nombre") != null ? rs.getString("Nombre") : "");
-                    vaccine.put("date", dateVal);
-                    list.add(vaccine);
+
+                    VaccineDTO dto = new VaccineDTO();
+                    dto.setId(vacId);
+                    dto.setName(rs.getString("Nombre") != null ? rs.getString("Nombre") : "");
+                    dto.setDate(dateVal);
+                    dto.setPet_id(petId);
+                    list.add(dto);
                 }
             }
         }
@@ -324,7 +342,7 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
     }
 
     @Override
-    public Map<String, Object> getVaccineById(int vaccineId) throws SQLException {
+    public VaccineDTO getVaccineById(int vaccineId) throws SQLException {
         String sql = "SELECT IdVacuna, Nombre, IdMascota FROM Vacunas WHERE IdVacuna = ?";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -332,14 +350,15 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     int vacId = rs.getInt("IdVacuna");
-                    Map<String, Object> vac = new HashMap<>();
-                    vac.put("id", vacId);
-                    vac.put("name", rs.getString("Nombre"));
-                    vac.put("pet_id", rs.getInt("IdMascota"));
                     Map<String, Object> extra = extraData.getOrDefault("vaccine_" + vacId, Map.of());
                     String dateVal = (String) extra.getOrDefault("date", java.time.LocalDate.now().toString());
-                    vac.put("date", dateVal);
-                    return vac;
+
+                    VaccineDTO dto = new VaccineDTO();
+                    dto.setId(vacId);
+                    dto.setName(rs.getString("Nombre"));
+                    dto.setPet_id(rs.getInt("IdMascota"));
+                    dto.setDate(dateVal);
+                    return dto;
                 }
             }
         }
@@ -347,41 +366,38 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
     }
 
     @Override
-    public int insertVaccine(Map<String, Object> body) throws SQLException {
-        String name = (String) body.get("name");
-        String dateStr = (String) body.get("date");
-        Object petIdObj = body.get("pet_id");
-        int petId = 1;
-        if (petIdObj instanceof Number) petId = ((Number) petIdObj).intValue();
-        else if (petIdObj instanceof String) petId = Integer.parseInt((String) petIdObj);
+    public int insertVaccine(VaccineDTO dto) throws SQLException {
+        String name = dto.getName();
+        String dateStr = dto.getDate();
+        Integer petId = dto.getPet_id();
 
         String sql = "INSERT INTO Vacunas (Nombre, IdMascota) VALUES (?, ?)";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, name);
-            ps.setInt(2, petId);
-            ps.executeUpdate();
+           ps.setString(1, name);
+           ps.setInt(2, petId != null ? petId : 1);
+           ps.executeUpdate();
 
-            int generatedId = 0;
-            try (ResultSet rs = ps.getGeneratedKeys()) {
-                if (rs.next()) {
-                    generatedId = rs.getInt(1);
-                }
-            }
+           int generatedId = 0;
+           try (ResultSet rs = ps.getGeneratedKeys()) {
+               if (rs.next()) {
+                   generatedId = rs.getInt(1);
+               }
+           }
 
-            if (generatedId > 0) {
-                Map<String, Object> extra = new HashMap<>();
-                extra.put("date", dateStr != null ? dateStr : java.time.LocalDate.now().toString());
-                extraData.put("vaccine_" + generatedId, extra);
-            }
-            return generatedId;
+           if (generatedId > 0) {
+               Map<String, Object> extra = new HashMap<>();
+               extra.put("date", dateStr != null ? dateStr : java.time.LocalDate.now().toString());
+               extraData.put("vaccine_" + generatedId, extra);
+           }
+           return generatedId;
         }
     }
 
     @Override
-    public boolean updateVaccine(int vaccineId, Map<String, Object> body) throws SQLException {
-        String name = (String) body.get("name");
-        String dateStr = (String) body.get("date");
+    public boolean updateVaccine(int vaccineId, VaccineDTO dto) throws SQLException {
+        String name = dto.getName();
+        String dateStr = dto.getDate();
 
         String sql = "UPDATE Vacunas SET Nombre = ? WHERE IdVacuna = ?";
         try (Connection conn = DatabaseConfig.getConnection();
@@ -395,8 +411,8 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
                 extra.put("date", dateStr != null ? dateStr : java.time.LocalDate.now().toString());
             }
             return updated;
-          }
-      }
+        }
+    }
 
     @Override
     public boolean deleteVaccine(int vaccineId) throws SQLException {
