@@ -12,7 +12,12 @@ public class UsuarioDAOImpl implements UsuarioDAO {
 
     @Override
     public Map<String, Object> autenticarUsuario(String email, String password) throws SQLException {
-        String sql = "SELECT IdUsuario, Nombre, IdRol, IdSeccional, IdGenero, Email, Contrasena, Activo FROM Usuario WHERE Email = ?";
+        String sql = """
+            SELECT u.IdUsuario, u.Nombre, u.IdRol, o.IdSeccional, u.IdGenero, u.Email, u.Contrasena, u.Activo 
+            FROM Usuario u 
+            LEFT JOIN Organizacion o ON u.IdOrganizacion = o.IdOrganizacion 
+            WHERE u.Email = ?
+            """;
         
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {

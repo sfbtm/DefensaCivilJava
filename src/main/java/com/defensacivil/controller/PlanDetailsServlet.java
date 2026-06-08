@@ -1,6 +1,9 @@
 package com.defensacivil.controller;
 
 import com.defensacivil.config.DatabaseConfig;
+import com.defensacivil.config.ResponseUtil;
+import com.defensacivil.dao.MascotaDAO;
+import com.defensacivil.dao.MascotaDAOImpl;
 import com.google.gson.Gson;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.MultipartConfig;
@@ -53,6 +56,8 @@ public class PlanDetailsServlet extends HttpServlet {
 
     // In-memory store for fields not mapped in the database schema (to align with legacy academic DB)
     private static final Map<String, Map<String, Object>> extraData = new ConcurrentHashMap<>();
+
+    private final MascotaDAO mascotaDAO = new MascotaDAOImpl(extraData);
 
     @Override
     protected void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -146,7 +151,8 @@ public class PlanDetailsServlet extends HttpServlet {
                             FROM PlanFamiliar p
                             JOIN Familia f ON p.IdFamilia = f.IdFamilia
                             LEFT JOIN Usuario u ON p.IdUsuario = u.IdUsuario
-                            LEFT JOIN Seccional s ON u.IdSeccional = s.IdSeccional
+                            LEFT JOIN Organizacion org ON u.IdOrganizacion = org.IdOrganizacion
+                            LEFT JOIN Seccional s ON org.IdSeccional = s.IdSeccional
                             ORDER BY p.IdPlanFamiliar DESC
                             LIMIT 5
                             """;
@@ -410,17 +416,16 @@ public class PlanDetailsServlet extends HttpServlet {
             if (servletPath.contains("animalGenders")) {
                 if (pathInfo != null && pathInfo.startsWith("/pet/")) {
                     int petId = Integer.parseInt(pathInfo.substring(5));
-                    String sql = "SELECT Genero FROM Mascotas WHERE IdMascota = ?";
+                    String sql = "SELECT m.IdGenero, g.Nombre AS GeneroNombre FROM Mascotas m LEFT JOIN Genero g ON m.IdGenero = g.IdGenero WHERE m.IdMascota = ?";
                     Map<String, Object> gender = Map.of("id", 1, "name", "Macho");
                     try (Connection conn = DatabaseConfig.getConnection();
                          PreparedStatement ps = conn.prepareStatement(sql)) {
                         ps.setInt(1, petId);
                         try (ResultSet rs = ps.executeQuery()) {
                             if (rs.next()) {
-                                String generoStr = rs.getString("Genero");
-                                int genderId = (generoStr != null && generoStr.equalsIgnoreCase("Hembra")) ? 2 : 1;
-                                String genderName = genderId == 1 ? "Macho" : "Hembra";
-                                gender = Map.of("id", genderId, "name", genderName);
+                                int genderId = rs.getInt("IdGenero");
+                                String genderName = rs.getString("GeneroNombre");
+                                gender = Map.of("id", genderId, "name", genderName != null ? genderName : "Macho");
                             }
                         }
                     }
@@ -461,7 +466,8 @@ public class PlanDetailsServlet extends HttpServlet {
                             FROM PlanFamiliar p
                             JOIN Familia f ON p.IdFamilia = f.IdFamilia
                             JOIN Usuario u ON p.IdUsuario = u.IdUsuario
-                            WHERE u.IdSeccional = ?
+                            LEFT JOIN Organizacion org ON u.IdOrganizacion = org.IdOrganizacion
+                            WHERE org.IdSeccional = ?
                             ORDER BY p.IdPlanFamiliar DESC
                             """;
                     } else { // Admin / default
@@ -854,132 +860,21 @@ public class PlanDetailsServlet extends HttpServlet {
             if (servletPath.contains("pets")) {
                 if (pathInfo != null && pathInfo.startsWith("/familyPlan/")) {
                     int planId = Integer.parseInt(pathInfo.substring(12));
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = "SELECT IdMascota, Nombre, Genero, Raza, Especie, Edad FROM Mascotas WHERE IdPlanFamiliar = ?";
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, planId);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                Map<String, Object> pet = new HashMap<>();
-                                pet.put("id", rs.getInt("IdMascota"));
-                                pet.put("name", rs.getString("Nombre"));
-                                pet.put("breed", rs.getString("Raza"));
-                                pet.put("birth_date", rs.getDate("Edad") != null ? rs.getDate("Edad").toString() : "");
-
-                                String especieStr = rs.getString("Especie");
-                                int speciesId = 1;
-                                if (especieStr != null) {
-                                    if (especieStr.equalsIgnoreCase("Perro")) speciesId = 1;
-                                    else if (especieStr.equalsIgnoreCase("Gato")) speciesId = 2;
-                                    else if (especieStr.equalsIgnoreCase("Ave")) speciesId = 3;
-                                }
-                                pet.put("species_id", speciesId);
-                                pet.put("species_name", especieStr != null ? especieStr : "Perro");
-                                pet.put("species", Map.of("id", speciesId, "name", especieStr != null ? especieStr : "Perro"));
-
-                                String generoStr = rs.getString("Genero");
-                                int genderId = (generoStr != null && generoStr.equalsIgnoreCase("Macho")) ? 1 : 2;
-                                pet.put("animal_gender_id", genderId);
-                                pet.put("animal_gender_name", genderId == 1 ? "Macho" : "Hembra");
-
-                                java.sql.Date edadDate = rs.getDate("Edad");
-                                int age = 0;
-                                if (edadDate != null) {
-                                    LocalDate birthDate = edadDate.toLocalDate();
-                                    LocalDate now = LocalDate.now();
-                                    age = java.time.Period.between(birthDate, now).getYears();
-                                }
-                                pet.put("age", age);
-                                pet.put("family_plan_id", planId);
-                                list.add(pet);
-                            }
-                        }
-                    }
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
+                    List<Map<String, Object>> list = mascotaDAO.getPetsByFamilyPlan(planId);
+                    ResponseUtil.sendSuccess(resp, list);
                     return;
-
                 } else if (pathInfo != null && !pathInfo.equals("/")) {
                     int idVal = Integer.parseInt(pathInfo.substring(1));
-                    String sql = "SELECT IdMascota, Nombre, Genero, Raza, Especie, Edad, IdPlanFamiliar FROM Mascotas WHERE IdMascota = ?";
-                    Map<String, Object> pet = new HashMap<>();
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, idVal);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) {
-                                pet.put("id", rs.getInt("IdMascota"));
-                                pet.put("name", rs.getString("Nombre"));
-                                pet.put("breed", rs.getString("Raza"));
-                                pet.put("birth_date", rs.getDate("Edad") != null ? rs.getDate("Edad").toString() : "");
-
-                                String especieStr = rs.getString("Especie");
-                                int speciesId = 1;
-                                if (especieStr != null) {
-                                    if (especieStr.equalsIgnoreCase("Perro")) speciesId = 1;
-                                    else if (especieStr.equalsIgnoreCase("Gato")) speciesId = 2;
-                                    else if (especieStr.equalsIgnoreCase("Ave")) speciesId = 3;
-                                }
-                                pet.put("species_id", speciesId);
-                                pet.put("species_name", especieStr != null ? especieStr : "Perro");
-                                pet.put("species", Map.of("id", speciesId, "name", especieStr != null ? especieStr : "Perro"));
-
-                                String generoStr = rs.getString("Genero");
-                                int genderId = (generoStr != null && generoStr.equalsIgnoreCase("Macho")) ? 1 : 2;
-                                pet.put("animal_gender_id", genderId);
-                                pet.put("animal_gender_name", genderId == 1 ? "Macho" : "Hembra");
-
-                                java.sql.Date edadDate = rs.getDate("Edad");
-                                int age = 0;
-                                if (edadDate != null) {
-                                    LocalDate birthDate = edadDate.toLocalDate();
-                                    LocalDate now = LocalDate.now();
-                                    age = java.time.Period.between(birthDate, now).getYears();
-                                }
-                                pet.put("age", age);
-                                pet.put("family_plan_id", rs.getInt("IdPlanFamiliar"));
-                            }
-                        }
+                    Map<String, Object> pet = mascotaDAO.getPetById(idVal);
+                    if (pet != null) {
+                        ResponseUtil.sendSuccess(resp, pet);
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Mascota no encontrada");
                     }
-                    resp.getWriter().write(gson.toJson(Map.of("data", pet)));
                     return;
-
                 } else {
-                    // LIST ALL PETS
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = "SELECT IdMascota, Nombre, Genero, Raza, Especie, Edad, IdPlanFamiliar FROM Mascotas";
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql);
-                         ResultSet rs = ps.executeQuery()) {
-                        while (rs.next()) {
-                            Map<String, Object> pet = new HashMap<>();
-                            int petId = rs.getInt("IdMascota");
-                            pet.put("id", petId);
-                            pet.put("name", rs.getString("Nombre"));
-
-                            String especieStr = rs.getString("Especie");
-                            int speciesId = 1;
-                            if (especieStr != null) {
-                                if (especieStr.equalsIgnoreCase("Perro")) speciesId = 1;
-                                else if (especieStr.equalsIgnoreCase("Gato")) speciesId = 2;
-                                else if (especieStr.equalsIgnoreCase("Ave")) speciesId = 3;
-                            }
-                            pet.put("species_id", speciesId);
-                            pet.put("species_name", especieStr != null ? especieStr : "Perro");
-                            pet.put("species", Map.of("id", speciesId, "name", especieStr != null ? especieStr : "Perro"));
-
-                            String generoStr = rs.getString("Genero");
-                            int genderId = (generoStr != null && generoStr.equalsIgnoreCase("Hembra")) ? 2 : 1;
-                            String genderName = genderId == 1 ? "Macho" : "Hembra";
-                            pet.put("animal_gender_id", genderId);
-                            pet.put("animal_gender_name", genderName);
-                            pet.put("animal_gender", Map.of("id", genderId, "name", genderName));
-
-                            pet.put("family_plan_id", rs.getInt("IdPlanFamiliar"));
-                            list.add(pet);
-                        }
-                    }
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
+                    List<Map<String, Object>> list = mascotaDAO.getAllPets();
+                    ResponseUtil.sendSuccess(resp, list);
                     return;
                 }
             }
@@ -988,47 +883,17 @@ public class PlanDetailsServlet extends HttpServlet {
             if (servletPath.contains("petVaccines")) {
                 if (pathInfo != null && pathInfo.startsWith("/pet/")) {
                     int petId = Integer.parseInt(pathInfo.substring(5));
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = "SELECT IdVacuna, Nombre FROM Vacunas WHERE IdMascota = ?";
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, petId);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                int vacId = rs.getInt("IdVacuna");
-                                Map<String, Object> extra = extraData.getOrDefault("vaccine_" + vacId, Map.of());
-                                String dateVal = (String) extra.getOrDefault("date", LocalDate.now().toString());
-                                list.add(Map.of(
-                                    "id", vacId,
-                                    "name", rs.getString("Nombre") != null ? rs.getString("Nombre") : "",
-                                    "date", dateVal
-                                ));
-                            }
-                        }
-                    }
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
+                    List<Map<String, Object>> list = mascotaDAO.getVaccinesByPet(petId);
+                    ResponseUtil.sendSuccess(resp, list);
                     return;
-
                 } else if (pathInfo != null && !pathInfo.equals("/")) {
                     int idVal = Integer.parseInt(pathInfo.substring(1));
-                    String sql = "SELECT IdVacuna, Nombre, IdMascota FROM Vacunas WHERE IdVacuna = ?";
-                    Map<String, Object> vac = new HashMap<>();
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, idVal);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) {
-                                int vacId = rs.getInt("IdVacuna");
-                                vac.put("id", vacId);
-                                vac.put("name", rs.getString("Nombre"));
-                                vac.put("pet_id", rs.getInt("IdMascota"));
-                                Map<String, Object> extra = extraData.getOrDefault("vaccine_" + vacId, Map.of());
-                                String dateVal = (String) extra.getOrDefault("date", LocalDate.now().toString());
-                                vac.put("date", dateVal);
-                            }
-                        }
+                    Map<String, Object> vac = mascotaDAO.getVaccineById(idVal);
+                    if (vac != null) {
+                        ResponseUtil.sendSuccess(resp, vac);
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Vacuna no encontrada");
                     }
-                    resp.getWriter().write(gson.toJson(Map.of("data", vac)));
                     return;
                 }
             }
@@ -1392,7 +1257,7 @@ public class PlanDetailsServlet extends HttpServlet {
                 if (pathInfo != null && pathInfo.startsWith("/familyPlan/boolean/")) {
                     int planId = Integer.parseInt(pathInfo.substring(20));
                     boolean exists = false;
-                    String sql = "SELECT COUNT(*) FROM PlanAccion WHERE IdPlanFamiliar = ?";
+                    String sql = "SELECT COUNT(*) FROM PlanAccion pa JOIN FactorRiesgo fr ON pa.IdFactorRiesgo = fr.IdFactorRiesgo WHERE fr.IdPlanFamiliar = ?";
                     try (Connection conn = DatabaseConfig.getConnection();
                          PreparedStatement ps = conn.prepareStatement(sql)) {
                         ps.setInt(1, planId);
@@ -1406,7 +1271,7 @@ public class PlanDetailsServlet extends HttpServlet {
                 } else if (pathInfo != null && pathInfo.startsWith("/familyPlan/")) {
                     int planId = Integer.parseInt(pathInfo.substring(12));
                     Map<String, Object> item = null;
-                    String sql = "SELECT IdPlanAccion, IdCoordinador FROM PlanAccion WHERE IdPlanFamiliar = ? LIMIT 1";
+                    String sql = "SELECT pa.IdPlanAccion, pa.IdCoordinador FROM PlanAccion pa JOIN FactorRiesgo fr ON pa.IdFactorRiesgo = fr.IdFactorRiesgo WHERE fr.IdPlanFamiliar = ? LIMIT 1";
                     try (Connection conn = DatabaseConfig.getConnection();
                          PreparedStatement ps = conn.prepareStatement(sql)) {
                         ps.setInt(1, planId);
@@ -1559,7 +1424,7 @@ public class PlanDetailsServlet extends HttpServlet {
 
                 try (Connection conn = DatabaseConfig.getConnection()) {
                     int existingId = 0;
-                    String checkSql = "SELECT IdRespuesta FROM Respuesta WHERE IdPregunta = ? AND IdPlanFamiliar = ?";
+                    String checkSql = "SELECT IdRespuestaPlan FROM RespuestaPlan WHERE IdPregunta = ? AND IdPlanFamiliar = ?";
                     try (PreparedStatement checkPs = conn.prepareStatement(checkSql)) {
                         checkPs.setInt(1, questionId);
                         checkPs.setInt(2, planId);
@@ -1571,14 +1436,14 @@ public class PlanDetailsServlet extends HttpServlet {
                     }
 
                     if (existingId > 0) {
-                        String updateSql = "UPDATE Respuesta SET Valor = ? WHERE IdRespuesta = ?";
+                        String updateSql = "UPDATE RespuestaPlan SET Valor = ? WHERE IdRespuestaPlan = ?";
                         try (PreparedStatement updatePs = conn.prepareStatement(updateSql)) {
                             updatePs.setBoolean(1, answer);
                             updatePs.setInt(2, existingId);
                             updatePs.executeUpdate();
                         }
                     } else {
-                        String insertSql = "INSERT INTO Respuesta (IdPregunta, IdPlanFamiliar, Valor) VALUES (?, ?, ?)";
+                        String insertSql = "INSERT INTO RespuestaPlan (IdPregunta, IdPlanFamiliar, Valor) VALUES (?, ?, ?)";
                         try (PreparedStatement insertPs = conn.prepareStatement(insertSql)) {
                             insertPs.setInt(1, questionId);
                             insertPs.setInt(2, planId);
@@ -1757,88 +1622,24 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // POST /api/pets
             if (servletPath.contains("pets")) {
-                String name = (String) body.get("name");
-                String breed = (String) body.get("breed");
-                String birthDateStr = (String) body.get("birth_date");
-                Object genderIdObj = body.get("animal_gender_id");
-                int genderId = 1;
-                if (genderIdObj instanceof Number) genderId = ((Number) genderIdObj).intValue();
-                else if (genderIdObj instanceof String) genderId = Integer.parseInt((String) genderIdObj);
-                String gender = (genderId == 1) ? "Macho" : "Hembra";
-
-                Object speciesIdObj = body.get("species_id");
-                int speciesId = 1;
-                if (speciesIdObj instanceof Number) speciesId = ((Number) speciesIdObj).intValue();
-                else if (speciesIdObj instanceof String) speciesId = Integer.parseInt((String) speciesIdObj);
-                String species = switch (speciesId) {
-                    case 1 -> "Perro";
-                    case 2 -> "Gato";
-                    case 3 -> "Ave";
-                    default -> "Perro";
-                };
-
-                Object planIdObj = body.get("family_plan_id");
-                int planId = 1;
-                if (planIdObj instanceof Number) planId = ((Number) planIdObj).intValue();
-                else if (planIdObj instanceof String) planId = Integer.parseInt((String) planIdObj);
-
-                String sql = "INSERT INTO Mascotas (Nombre, Genero, Raza, Especie, Edad, IdPlanFamiliar) VALUES (?, ?, ?, ?, ?, ?)";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-                    ps.setString(1, name);
-                    ps.setString(2, gender);
-                    ps.setString(3, breed);
-                    ps.setString(4, species);
-                    ps.setDate(5, birthDateStr != null && !birthDateStr.isEmpty() ? Date.valueOf(birthDateStr) : Date.valueOf(LocalDate.now()));
-                    ps.setInt(6, planId);
-                    ps.executeUpdate();
-
-                    int generatedId = 0;
-                    try (ResultSet rs = ps.getGeneratedKeys()) {
-                        if (rs.next()) {
-                            generatedId = rs.getInt(1);
-                        }
-                    }
-
-                    resp.setStatus(HttpServletResponse.SC_CREATED);
-                    resp.getWriter().write(String.format("{\"success\":true,\"message\":\"Mascota agregada exitosamente\",\"data\":{\"id\":%d}}", generatedId));
-                    return;
+                int generatedId = mascotaDAO.insertPet(body);
+                if (generatedId > 0) {
+                    ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, Map.of("id", generatedId), "Mascota agregada exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al agregar mascota");
                 }
+                return;
             }
 
             // POST /api/petVaccines
             if (servletPath.contains("petVaccines")) {
-                String name = (String) body.get("name");
-                String dateStr = (String) body.get("date");
-                Object petIdObj = body.get("pet_id");
-                int petId = 1;
-                if (petIdObj instanceof Number) petId = ((Number) petIdObj).intValue();
-                else if (petIdObj instanceof String) petId = Integer.parseInt((String) petIdObj);
-
-                String sql = "INSERT INTO Vacunas (Nombre, IdMascota) VALUES (?, ?)";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-                    ps.setString(1, name);
-                    ps.setInt(2, petId);
-                    ps.executeUpdate();
-
-                    int generatedId = 0;
-                    try (ResultSet rs = ps.getGeneratedKeys()) {
-                        if (rs.next()) {
-                            generatedId = rs.getInt(1);
-                        }
-                    }
-
-                    if (generatedId > 0) {
-                        Map<String, Object> extra = new HashMap<>();
-                        extra.put("date", dateStr != null ? dateStr : LocalDate.now().toString());
-                        extraData.put("vaccine_" + generatedId, extra);
-                    }
-
-                    resp.setStatus(HttpServletResponse.SC_CREATED);
-                    resp.getWriter().write("{\"success\":true,\"message\":\"Vacuna agregada exitosamente\"}");
-                    return;
+                int generatedId = mascotaDAO.insertVaccine(body);
+                if (generatedId > 0) {
+                    ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, null, "Vacuna agregada exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al agregar vacuna");
                 }
+                return;
             }
 
             // POST /api/riskFactors
@@ -2112,7 +1913,7 @@ public class PlanDetailsServlet extends HttpServlet {
                 int coordId = 0;
                 if (coordIdObj instanceof Number) coordId = ((Number) coordIdObj).intValue();
 
-                String sql = "INSERT INTO PlanAccion (IdPlanFamiliar, IdFactorRiesgo, IdCoordinador) VALUES (?, ?, ?)";
+                String sql = "INSERT INTO PlanAccion (IdFactorRiesgo, IdCoordinador) VALUES (?, ?)";
                 try (Connection conn = DatabaseConfig.getConnection()) {
                     // Try to find a risk factor to link to
                     int riskId = 0;
@@ -2139,9 +1940,8 @@ public class PlanDetailsServlet extends HttpServlet {
                     }
 
                     try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, planId);
-                        ps.setInt(2, riskId);
-                        ps.setInt(3, coordId);
+                        ps.setInt(1, riskId);
+                        ps.setInt(2, coordId);
                         ps.executeUpdate();
                         resp.setStatus(HttpServletResponse.SC_CREATED);
                         resp.getWriter().write("{\"success\":true,\"message\":\"Plan de accion creado exitosamente\"}");
@@ -2431,60 +2231,24 @@ public class PlanDetailsServlet extends HttpServlet {
             // PATCH /api/pets/{id}
             if (servletPath.contains("pets")) {
                 int petId = Integer.parseInt(pathInfo.substring(1));
-                String name = (String) body.get("name");
-                String breed = (String) body.get("breed");
-                String birthDateStr = (String) body.get("birth_date");
-
-                Object genderIdObj = body.get("animal_gender_id");
-                int genderId = 1;
-                if (genderIdObj instanceof Number) genderId = ((Number) genderIdObj).intValue();
-                else if (genderIdObj instanceof String) genderId = Integer.parseInt((String) genderIdObj);
-                String gender = (genderId == 1) ? "Macho" : "Hembra";
-
-                Object speciesIdObj = body.get("species_id");
-                int speciesId = 1;
-                if (speciesIdObj instanceof Number) speciesId = ((Number) speciesIdObj).intValue();
-                else if (speciesIdObj instanceof String) speciesId = Integer.parseInt((String) speciesIdObj);
-                String species = switch (speciesId) {
-                    case 1 -> "Perro";
-                    case 2 -> "Gato";
-                    case 3 -> "Ave";
-                    default -> "Perro";
-                };
-
-                String sql = "UPDATE Mascotas SET Nombre = ?, Genero = ?, Raza = ?, Especie = ?, Edad = ? WHERE IdMascota = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setString(1, name);
-                    ps.setString(2, gender);
-                    ps.setString(3, breed);
-                    ps.setString(4, species);
-                    ps.setDate(5, birthDateStr != null && !birthDateStr.isEmpty() ? Date.valueOf(birthDateStr) : Date.valueOf(LocalDate.now()));
-                    ps.setInt(6, petId);
-                    ps.executeUpdate();
+                boolean updated = mascotaDAO.updatePet(petId, body);
+                if (updated) {
+                    ResponseUtil.sendSuccess(resp, "Mascota actualizada exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Mascota no encontrada");
                 }
-                resp.getWriter().write("{\"success\":true,\"message\":\"Mascota actualizada exitosamente\"}");
                 return;
             }
 
             // PATCH /api/petVaccines/{id}
             if (servletPath.contains("petVaccines")) {
                 int vaccineId = Integer.parseInt(pathInfo.substring(1));
-                String name = (String) body.get("name");
-                String dateStr = (String) body.get("date");
-
-                String sql = "UPDATE Vacunas SET Nombre = ? WHERE IdVacuna = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setString(1, name);
-                    ps.setInt(2, vaccineId);
-                    ps.executeUpdate();
+                boolean updated = mascotaDAO.updateVaccine(vaccineId, body);
+                if (updated) {
+                    ResponseUtil.sendSuccess(resp, "Vacuna actualizada exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Vacuna no encontrada");
                 }
-
-                Map<String, Object> extra = extraData.computeIfAbsent("vaccine_" + vaccineId, k -> new HashMap<>());
-                extra.put("date", dateStr != null ? dateStr : LocalDate.now().toString());
-
-                resp.getWriter().write("{\"success\":true,\"message\":\"Vacuna actualizada exitosamente\"}");
                 return;
             }
 
@@ -2702,31 +2466,23 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // DELETE /api/pets/{id}
             if (servletPath.contains("pets")) {
-                try (Connection conn = DatabaseConfig.getConnection()) {
-                    // Delete related vaccines first
-                    try (PreparedStatement psV = conn.prepareStatement("DELETE FROM Vacunas WHERE IdMascota = ?")) {
-                        psV.setInt(1, idVal);
-                        psV.executeUpdate();
-                    }
-                    try (PreparedStatement ps = conn.prepareStatement("DELETE FROM Mascotas WHERE IdMascota = ?")) {
-                        ps.setInt(1, idVal);
-                        ps.executeUpdate();
-                    }
+                boolean deleted = mascotaDAO.deletePet(idVal);
+                if (deleted) {
+                    ResponseUtil.sendSuccess(resp, "Mascota eliminada exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Mascota no encontrada");
                 }
-                resp.getWriter().write("{\"success\":true,\"message\":\"Mascota eliminada exitosamente\"}");
                 return;
             }
 
             // DELETE /api/petVaccines/{id}
             if (servletPath.contains("petVaccines")) {
-                String sql = "DELETE FROM Vacunas WHERE IdVacuna = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setInt(1, idVal);
-                    ps.executeUpdate();
+                boolean deleted = mascotaDAO.deleteVaccine(idVal);
+                if (deleted) {
+                    ResponseUtil.sendSuccess(resp, "Vacuna eliminada exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Vacuna no encontrada");
                 }
-                extraData.remove("vaccine_" + idVal);
-                resp.getWriter().write("{\"success\":true,\"message\":\"Vacuna eliminada exitosamente\"}");
                 return;
             }
 

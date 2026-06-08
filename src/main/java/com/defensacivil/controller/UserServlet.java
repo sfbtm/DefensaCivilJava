@@ -169,7 +169,7 @@ public class UserServlet extends HttpServlet {
                 FROM Usuario u
                 LEFT JOIN DocumentoTipo dt ON u.IdDocumentoTipo = dt.IdDocumentoTipo
                 LEFT JOIN Organizacion o ON u.IdOrganizacion = o.IdOrganizacion
-                LEFT JOIN Seccional s ON u.IdSeccional = s.IdSeccional
+                LEFT JOIN Seccional s ON o.IdSeccional = s.IdSeccional
                 WHERE u.Activo = 3 AND u.IdRol = 3
                 ORDER BY u.IdUsuario DESC
                 """;
@@ -217,8 +217,8 @@ public class UserServlet extends HttpServlet {
                 FROM Usuario u
                 LEFT JOIN DocumentoTipo dt ON u.IdDocumentoTipo = dt.IdDocumentoTipo
                 LEFT JOIN Organizacion o ON u.IdOrganizacion = o.IdOrganizacion
-                LEFT JOIN Seccional s ON u.IdSeccional = s.IdSeccional
-                WHERE u.Activo = 3 AND u.IdRol = 2 AND u.IdSeccional = ?
+                LEFT JOIN Seccional s ON o.IdSeccional = s.IdSeccional
+                WHERE u.Activo = 3 AND u.IdRol = 2 AND o.IdSeccional = ?
                 ORDER BY u.IdUsuario DESC
                 """;
             try (Connection conn = DatabaseConfig.getConnection();
@@ -267,9 +267,9 @@ public class UserServlet extends HttpServlet {
                 FROM Usuario u
                 LEFT JOIN DocumentoTipo dt ON u.IdDocumentoTipo = dt.IdDocumentoTipo
                 LEFT JOIN Organizacion o ON u.IdOrganizacion = o.IdOrganizacion
-                LEFT JOIN Seccional s ON u.IdSeccional = s.IdSeccional
+                LEFT JOIN Seccional s ON o.IdSeccional = s.IdSeccional
                 LEFT JOIN Rol r ON u.IdRol = r.IdRol
-                WHERE u.Activo != 3 AND u.IdRol = 3 AND u.IdSeccional = ?
+                WHERE u.Activo != 3 AND u.IdRol = 3 AND o.IdSeccional = ?
                 ORDER BY u.IdUsuario DESC
                 """;
             try (Connection conn = DatabaseConfig.getConnection();
@@ -325,8 +325,8 @@ public class UserServlet extends HttpServlet {
                         o.Nombre AS OrganizacionNombre
                     FROM Usuario u
                     LEFT JOIN Rol r ON u.IdRol = r.IdRol
-                    LEFT JOIN Seccional s ON u.IdSeccional = s.IdSeccional
                     LEFT JOIN Organizacion o ON u.IdOrganizacion = o.IdOrganizacion
+                    LEFT JOIN Seccional s ON o.IdSeccional = s.IdSeccional
                     WHERE u.Activo != 3 AND u.IdRol != 1
                     ORDER BY u.IdUsuario DESC
                     """;
@@ -383,8 +383,8 @@ public class UserServlet extends HttpServlet {
                         LEFT JOIN Rol r ON u.IdRol = r.IdRol
                         LEFT JOIN Genero g ON u.IdGenero = g.IdGenero
                         LEFT JOIN DocumentoTipo dt ON u.IdDocumentoTipo = dt.IdDocumentoTipo
-                        LEFT JOIN Seccional s ON u.IdSeccional = s.IdSeccional
                         LEFT JOIN Organizacion o ON u.IdOrganizacion = o.IdOrganizacion
+                        LEFT JOIN Seccional s ON o.IdSeccional = s.IdSeccional
                         WHERE u.IdUsuario = ?
                         """;
 
@@ -508,20 +508,6 @@ public class UserServlet extends HttpServlet {
                         }
                     }
 
-                    // Resolve IdSeccional from IdOrganizacion
-                    int sectionalId = 1;
-                    if (regReq.organization_id != null) {
-                        String orgSql = "SELECT IdSeccional FROM Organizacion WHERE IdOrganizacion = ?";
-                        try (PreparedStatement ps = conn.prepareStatement(orgSql)) {
-                            ps.setInt(1, regReq.organization_id);
-                            try (ResultSet rs = ps.executeQuery()) {
-                                if (rs.next()) {
-                                    sectionalId = rs.getInt("IdSeccional");
-                                }
-                            }
-                        }
-                    }
-
                     java.sql.Date birthDate = null;
                     if (regReq.birth_date != null && !regReq.birth_date.trim().isEmpty()) {
                         try {
@@ -534,9 +520,9 @@ public class UserServlet extends HttpServlet {
                     String insertSql = """
                         INSERT INTO Usuario (
                             Nombre, Documento, IdRol, IdGenero, IdDocumentoTipo, 
-                            IdNacionalidad, IdDepartamento, IdSeccional, Email, 
-                            Contrasena, Telefono, FechaNacimiento, IdOrganizacion, Activo
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            IdNacionalidad, Email, Contrasena, Telefono, 
+                            FechaNacimiento, IdOrganizacion, Activo
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """;
                     try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
                         ps.setString(1, regReq.names + (regReq.last_names != null && !regReq.last_names.trim().isEmpty() ? " " + regReq.last_names : ""));
@@ -545,14 +531,12 @@ public class UserServlet extends HttpServlet {
                         ps.setObject(4, regReq.gender_id, java.sql.Types.INTEGER);
                         ps.setObject(5, regReq.document_type_id, java.sql.Types.INTEGER);
                         ps.setInt(6, 1); // Nacionalidad Colombiana
-                        ps.setInt(7, 1); // Antioquia
-                        ps.setInt(8, sectionalId);
-                        ps.setString(9, regReq.email);
-                        ps.setString(10, regReq.password);
-                        ps.setString(11, regReq.phone);
-                        ps.setDate(12, birthDate);
-                        ps.setObject(13, regReq.organization_id, java.sql.Types.INTEGER);
-                        ps.setInt(14, 3); // Activo = 3 (Peticion)
+                        ps.setString(7, regReq.email);
+                        ps.setString(8, regReq.password);
+                        ps.setString(9, regReq.phone);
+                        ps.setDate(10, birthDate);
+                        ps.setObject(11, regReq.organization_id, java.sql.Types.INTEGER);
+                        ps.setInt(12, 3); // Activo = 3 (Peticion)
 
                         int affected = ps.executeUpdate();
                         if (affected > 0) {
