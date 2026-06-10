@@ -2,20 +2,13 @@ package com.defensacivil.controller;
 
 import com.defensacivil.config.DatabaseConfig;
 import com.defensacivil.config.ResponseUtil;
-import com.defensacivil.dao.MascotaDAO;
-import com.defensacivil.dao.MascotaDAOImpl;
 import com.defensacivil.dao.PlanFamiliarDAO;
 import com.defensacivil.dao.PlanFamiliarDAOImpl;
-import com.defensacivil.dao.IntegranteDAO;
-import com.defensacivil.dao.IntegranteDAOImpl;
-import com.defensacivil.dao.VulnerabilidadDAO;
-import com.defensacivil.dao.VulnerabilidadDAOImpl;
 import com.defensacivil.dao.PlanComplementarioDAO;
 import com.defensacivil.dao.PlanComplementarioDAOImpl;
 import com.defensacivil.dto.HousingInfoDTO;
 import com.defensacivil.dto.ActionPlanDTO;
 import com.defensacivil.dto.ActionDTO;
-import com.defensacivil.dto.VaccineDTO;
 import com.google.gson.Gson;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.MultipartConfig;
@@ -27,7 +20,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.sql.*;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -36,30 +28,17 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @WebServlet(urlPatterns = {
     "/api/familyPlans/*",
-    "/api/members/*",
-    "/api/conditionMembers/*",
-    "/api/conditionTypes/*",
-    "/api/pets/*",
-    "/api/petVaccines/*",
-    "/api/riskFactors/*",
-    "/api/vulnerabilityFactors/*",
-    "/api/riskReductionActions/*",
-    "/api/vulnerabilityGrades/*",
-    "/api/statusPlans/*",
-    "/api/zones/*",
-    "/api/cities/*",
+    "/api/statusPlans",
+    "/api/zones",
+    "/api/cities",
     "/api/housingInfo/*",
-    "/api/housingGraphics/*",
     "/api/actionPlans/*",
     "/api/actionPlanActions/*",
-    "/api/familyMembers/*",
-    "/api/kinships/*",
-    "/api/bloodGroups/*",
-    "/api/vulnerableTest/*",
-    "/api/animalGenders/*",
+    "/api/kinships",
+    "/api/bloodGroups",
+    "/api/animalGenders",
     "/api/availableResources/*",
-    "/api/audits/*",
-    "/storage/*"
+    "/api/audits/*"
 })
 @MultipartConfig
 public class PlanDetailsServlet extends HttpServlet {
@@ -69,10 +48,7 @@ public class PlanDetailsServlet extends HttpServlet {
     // In-memory store for fields not mapped in the database schema (to align with legacy academic DB)
     private static final Map<String, Map<String, Object>> extraData = new ConcurrentHashMap<>();
 
-    private final MascotaDAO mascotaDAO = new MascotaDAOImpl(extraData);
     private final PlanFamiliarDAO planFamiliarDAO = new PlanFamiliarDAOImpl(extraData);
-    private final IntegranteDAO integranteDAO = new IntegranteDAOImpl(extraData);
-    private final VulnerabilidadDAO vulnerabilidadDAO = new VulnerabilidadDAOImpl(extraData);
     private final PlanComplementarioDAO planComplementarioDAO = new PlanComplementarioDAOImpl(extraData);
 
     @Override
@@ -85,39 +61,9 @@ public class PlanDetailsServlet extends HttpServlet {
     }
 
     @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String servletPath = req.getServletPath();
         String pathInfo = req.getPathInfo();
-
-        if (servletPath != null && servletPath.contains("storage")) {
-            String requestedFile = pathInfo != null ? pathInfo.substring(1) : "";
-            if (requestedFile.isEmpty() && servletPath.length() > 9) {
-                requestedFile = servletPath.substring(9);
-            }
-            java.io.File file = new java.io.File("/home/dylan/Documents/projects/df/DefensaCivilAPI/storage", requestedFile);
-            if (!file.exists() || file.isDirectory()) {
-                // Fallback to default mock image
-                file = new java.io.File("/home/dylan/Documents/projects/df/UIDefensaCivil_Modificado/public/familia.png");
-            }
-            if (file.exists()) {
-                String mimeType = getServletContext().getMimeType(file.getName());
-                if (mimeType == null) {
-                    mimeType = "image/png";
-                }
-                resp.setContentType(mimeType);
-                try (java.io.FileInputStream in = new java.io.FileInputStream(file);
-                     java.io.OutputStream out = resp.getOutputStream()) {
-                    byte[] buffer = new byte[4096];
-                    int bytesRead;
-                    while ((bytesRead = in.read(buffer)) != -1) {
-                        out.write(buffer, 0, bytesRead);
-                    }
-                }
-            } else {
-                resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-            }
-            return;
-        }
 
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
@@ -153,28 +99,6 @@ public class PlanDetailsServlet extends HttpServlet {
                 List<Map<String, Object>> list = List.of(
                     Map.of("id", 1, "name", "Urbana"),
                     Map.of("id", 2, "name", "Rural")
-                );
-                resp.getWriter().write(gson.toJson(Map.of("data", list)));
-                return;
-            }
-
-            if (servletPath.contains("vulnerabilityGrades")) {
-                List<Map<String, Object>> list = List.of(
-                    Map.of("id", 1, "name", "Bajo"),
-                    Map.of("id", 2, "name", "Medio"),
-                    Map.of("id", 3, "name", "Alto")
-                );
-                resp.getWriter().write(gson.toJson(Map.of("data", list)));
-                return;
-            }
-
-            if (servletPath.contains("conditionTypes")) {
-                List<Map<String, Object>> list = List.of(
-                    Map.of("id", 1, "name", "Diabetes"),
-                    Map.of("id", 2, "name", "Hipertensión"),
-                    Map.of("id", 3, "name", "Asma"),
-                    Map.of("id", 4, "name", "Alergia"),
-                    Map.of("id", 5, "name", "Otra")
                 );
                 resp.getWriter().write(gson.toJson(Map.of("data", list)));
                 return;
@@ -325,230 +249,6 @@ public class PlanDetailsServlet extends HttpServlet {
                 }
             }
 
-            // MEMBERS
-            if (servletPath.contains("members")) {
-                if (pathInfo != null && pathInfo.startsWith("/familyPlan/select/")) {
-                    int familyPlanId = Integer.parseInt(pathInfo.substring(19));
-                    List<Map<String, Object>> list = integranteDAO.getMembersForSelect(familyPlanId);
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
-                    return;
-
-                } else if (pathInfo != null && pathInfo.startsWith("/familyPlan/")) {
-                    int familyPlanId = Integer.parseInt(pathInfo.substring(12));
-                    List<Map<String, Object>> list = integranteDAO.getMembersByFamilyPlan(familyPlanId);
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
-                    return;
-
-                } else if (pathInfo != null && !pathInfo.equals("/")) {
-                    // SINGLE MEMBER BY ID
-                    int idVal = Integer.parseInt(pathInfo.substring(1));
-                    Map<String, Object> member = integranteDAO.getMemberById(idVal);
-                    resp.getWriter().write(gson.toJson(Map.of("data", member)));
-                    return;
-                }
-            }
-
-            // FAMILY MEMBERS (SUPERVISOR BULK ACCESS)
-            if (servletPath.contains("familyMembers")) {
-                List<Map<String, Object>> list = integranteDAO.getAllFamilyMembers();
-                resp.getWriter().write(gson.toJson(Map.of("data", list)));
-                return;
-            }
-
-            // CONDITION MEMBERS (Enfermedades)
-            if (servletPath.contains("conditionMembers")) {
-                if (pathInfo != null && pathInfo.startsWith("/member/")) {
-                    int memberId = Integer.parseInt(pathInfo.substring(8));
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = "SELECT IdEnfermedad, Nombre, Medicina, Dosis FROM Enfermedad WHERE IdIntegrante = ?";
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, memberId);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                Map<String, Object> cond = new HashMap<>();
-                                int condId = rs.getInt("IdEnfermedad");
-                                cond.put("id", condId);
-                                cond.put("name", rs.getString("Nombre"));
-                                cond.put("dose", rs.getString("Dosis"));
-                                cond.put("medicine", rs.getString("Medicina"));
-
-                                Map<String, Object> extra = extraData.getOrDefault("condition_" + condId, Map.of());
-                                int ctId = 1;
-                                if (extra.containsKey("condition_type_id")) {
-                                    Object val = extra.get("condition_type_id");
-                                    if (val instanceof Number) ctId = ((Number) val).intValue();
-                                    else if (val instanceof String) ctId = Integer.parseInt((String) val);
-                                }
-                                String ctName = switch (ctId) {
-                                    case 1 -> "Diabetes";
-                                    case 2 -> "Hipertensión";
-                                    case 3 -> "Asma";
-                                    case 4 -> "Alergia";
-                                    case 5 -> "Otra";
-                                    default -> "Diabetes";
-                                };
-                                cond.put("condition_type_id", ctId);
-                                cond.put("condition_type", Map.of("id", ctId, "name", ctName));
-                                list.add(cond);
-                            }
-                        }
-                    }
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
-                    return;
-
-                } else if (pathInfo != null && !pathInfo.equals("/")) {
-                    int idVal = Integer.parseInt(pathInfo.substring(1));
-                    String sql = "SELECT IdEnfermedad, IdIntegrante, Nombre, Medicina, Dosis FROM Enfermedad WHERE IdEnfermedad = ?";
-                    Map<String, Object> cond = new HashMap<>();
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, idVal);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) {
-                                cond.put("id", rs.getInt("IdEnfermedad"));
-                                cond.put("name", rs.getString("Nombre"));
-                                cond.put("dose", rs.getString("Dosis"));
-                                cond.put("medicine", rs.getString("Medicina"));
-
-                                Map<String, Object> extra = extraData.getOrDefault("condition_" + idVal, Map.of());
-                                int ctId = 1;
-                                if (extra.containsKey("condition_type_id")) {
-                                    Object val = extra.get("condition_type_id");
-                                    if (val instanceof Number) ctId = ((Number) val).intValue();
-                                    else if (val instanceof String) ctId = Integer.parseInt((String) val);
-                                }
-                                String ctName = switch (ctId) {
-                                    case 1 -> "Diabetes";
-                                    case 2 -> "Hipertensión";
-                                    case 3 -> "Asma";
-                                    case 4 -> "Alergia";
-                                    case 5 -> "Otra";
-                                    default -> "Diabetes";
-                                };
-                                cond.put("condition_type_id", ctId);
-                                cond.put("condition_type", Map.of("id", ctId, "name", ctName));
-                                cond.put("member_id", rs.getInt("IdIntegrante"));
-                            }
-                        }
-                    }
-                    resp.getWriter().write(gson.toJson(Map.of("data", cond)));
-                    return;
-                }
-            }
-
-            // PETS
-            if (servletPath.contains("pets")) {
-                if (pathInfo != null && pathInfo.startsWith("/familyPlan/")) {
-                    int planId = Integer.parseInt(pathInfo.substring(12));
-                    List<Map<String, Object>> list = mascotaDAO.getPetsByFamilyPlan(planId);
-                    ResponseUtil.sendSuccess(resp, list);
-                    return;
-                } else if (pathInfo != null && !pathInfo.equals("/")) {
-                    int idVal = Integer.parseInt(pathInfo.substring(1));
-                    Map<String, Object> pet = mascotaDAO.getPetById(idVal);
-                    if (pet != null) {
-                        ResponseUtil.sendSuccess(resp, pet);
-                    } else {
-                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Mascota no encontrada");
-                    }
-                    return;
-                } else {
-                    List<Map<String, Object>> list = mascotaDAO.getAllPets();
-                    ResponseUtil.sendSuccess(resp, list);
-                    return;
-                }
-            }
-
-            // PET VACCINES
-            if (servletPath.contains("petVaccines")) {
-                if (pathInfo != null && pathInfo.startsWith("/pet/")) {
-                    int petId = extractId(pathInfo, "/pet");
-                    List<VaccineDTO> list = planComplementarioDAO.getVaccinesByPet(petId);
-                    ResponseUtil.sendSuccess(resp, list);
-                } else {
-                    int idVal = extractId(pathInfo, null);
-                    VaccineDTO dto = planComplementarioDAO.getVaccineById(idVal);
-                    if (dto != null) {
-                        ResponseUtil.sendSuccess(resp, dto);
-                    } else {
-                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Vacuna no encontrada");
-                    }
-                }
-                return;
-            }
-
-            // RISK FACTORS
-            if (servletPath.contains("riskFactors")) {
-                if (pathInfo != null && pathInfo.startsWith("/familyPlan/select/")) {
-                    int planId = Integer.parseInt(pathInfo.substring(19));
-                    List<Map<String, Object>> list = vulnerabilidadDAO.getRiskFactorsForSelect(planId);
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
-                    return;
-
-                } else if (pathInfo != null && pathInfo.startsWith("/familyPlan/")) {
-                    int planId = Integer.parseInt(pathInfo.substring(12));
-                    List<Map<String, Object>> list = vulnerabilidadDAO.getRiskFactorsByPlan(planId);
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
-                    return;
-
-                } else if (pathInfo != null && !pathInfo.equals("/")) {
-                    int idVal = Integer.parseInt(pathInfo.substring(1));
-                    Map<String, Object> risk = vulnerabilidadDAO.getRiskFactorById(idVal);
-                    resp.getWriter().write(gson.toJson(Map.of("data", risk)));
-                    return;
-
-                } else {
-                    // LIST ALL RISK FACTORS
-                    List<Map<String, Object>> list = vulnerabilidadDAO.getAllRiskFactors();
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
-                    return;
-                }
-            }
-
-            // VULNERABILITY FACTORS
-            if (servletPath.contains("vulnerabilityFactors")) {
-                if (pathInfo != null && pathInfo.startsWith("/riskFactor/")) {
-                    int riskId = Integer.parseInt(pathInfo.substring(12));
-                    List<Map<String, Object>> list = vulnerabilidadDAO.getVulnerabilitiesByRiskFactor(riskId);
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
-                    return;
-
-                } else if (pathInfo != null && !pathInfo.equals("/")) {
-                    int idVal = Integer.parseInt(pathInfo.substring(1));
-                    Map<String, Object> item = vulnerabilidadDAO.getVulnerabilityById(idVal);
-                    resp.getWriter().write(gson.toJson(Map.of("data", item)));
-                    return;
-                }
-            }
-
-            // RISK REDUCTION ACTIONS (Mocked database store mapped to memory because DB is unmapped for these)
-            if (servletPath.contains("riskReductionActions")) {
-                if (pathInfo != null && pathInfo.startsWith("/riskFactor/")) {
-                    int riskId = Integer.parseInt(pathInfo.substring(12));
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    // Retrieve from memory or return mock
-                    Map<String, Object> extra = extraData.getOrDefault("risk_actions_" + riskId, Map.of());
-                    if (!extra.isEmpty()) {
-                        list.add(extra);
-                    }
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
-                    return;
-
-                } else if (pathInfo != null && !pathInfo.equals("/")) {
-                    int idVal = Integer.parseInt(pathInfo.substring(1));
-                    Map<String, Object> extra = extraData.getOrDefault("reduction_action_" + idVal, Map.of(
-                        "id", idVal,
-                        "action", "Revisión estructural",
-                        "member_id", 1,
-                        "member", Map.of("names", "Voluntario", "last_names", "Civil"),
-                        "end_date", LocalDate.now().toString()
-                    ));
-                    resp.getWriter().write(gson.toJson(Map.of("data", extra)));
-                    return;
-                }
-            }
-
             // GET /api/availableResources
             if (servletPath.contains("availableResources")) {
                 if (pathInfo != null && pathInfo.startsWith("/familyPlan/")) {
@@ -628,24 +328,6 @@ public class PlanDetailsServlet extends HttpServlet {
                 return;
             }
 
-            // HOUSING GRAPHICS (GraficoVivienda with EsEntorno = 0)
-            if (servletPath.contains("housingGraphics")) {
-                if (pathInfo != null && pathInfo.startsWith("/familyPlan/")) {
-                    int planId = extractId(pathInfo, "/familyPlan");
-                    List<HousingInfoDTO> list = planComplementarioDAO.getHousingGraphicsByPlan(planId);
-                    ResponseUtil.sendSuccess(resp, list);
-                } else {
-                    int idVal = extractId(pathInfo, null);
-                    HousingInfoDTO dto = planComplementarioDAO.getHousingGraphicById(idVal);
-                    if (dto != null) {
-                        ResponseUtil.sendSuccess(resp, dto);
-                    } else {
-                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Gráfico no encontrado");
-                    }
-                }
-                return;
-            }
-
             // ACTION PLANS (PlanAccion)
             if (servletPath.contains("actionPlans")) {
                 if (pathInfo != null && pathInfo.startsWith("/familyPlan/boolean/")) {
@@ -682,18 +364,16 @@ public class PlanDetailsServlet extends HttpServlet {
                 return;
             }
 
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"success\":false,\"message\":\"Ruta GET no soportada\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "Ruta GET no soportada");
 
         } catch (Exception e) {
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            resp.getWriter().write("{\"success\":false,\"message\":\"" + e.getMessage() + "\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
             e.printStackTrace();
         }
     }
 
     @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
 
@@ -729,41 +409,6 @@ public class PlanDetailsServlet extends HttpServlet {
                 }
             }
 
-            // POST /api/vulnerableTest
-            if (servletPath.contains("vulnerableTest")) {
-                Object questionIdObj = body.get("vulnerable_question_id");
-                Object planIdObj = body.get("family_plan_id");
-                Object answerObj = body.get("answer");
-
-                int questionId = 0;
-                if (questionIdObj instanceof Number) questionId = ((Number) questionIdObj).intValue();
-                else if (questionIdObj instanceof String) questionId = Integer.parseInt((String) questionIdObj);
-
-                int planId = 0;
-                if (planIdObj instanceof Number) planId = ((Number) planIdObj).intValue();
-                else if (planIdObj instanceof String) planId = Integer.parseInt((String) planIdObj);
-
-                boolean answer = false;
-                if (answerObj instanceof Boolean) answer = (Boolean) answerObj;
-                else if (answerObj instanceof String) answer = Boolean.parseBoolean((String) answerObj);
-
-                try {
-                    boolean success = vulnerabilidadDAO.saveOrUpdateVulnerableTestAnswer(planId, questionId, answer);
-                    if (success) {
-                        resp.setStatus(HttpServletResponse.SC_CREATED);
-                        resp.getWriter().write("{\"success\":true,\"message\":\"Respuesta guardada exitosamente\"}");
-                    } else {
-                        resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                        resp.getWriter().write("{\"success\":false,\"message\":\"No se pudo guardar la respuesta\"}");
-                    }
-                } catch (SQLException e) {
-                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                    resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos\"}");
-                    e.printStackTrace();
-                }
-                return;
-            }
-
             // POST /api/familyPlans
             if (servletPath.contains("familyPlans")) {
                 String lastNames = (String) body.get("last_names");
@@ -790,104 +435,6 @@ public class PlanDetailsServlet extends HttpServlet {
                     ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, Map.of("id", planId), "Plan familiar creado con exito");
                 } else {
                     ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al crear el plan familiar");
-                }
-                return;
-            }
-
-            // POST /api/members/{familyPlanId}
-            if (servletPath.contains("members")) {
-                int familyPlanId = Integer.parseInt(pathInfo.substring(1));
-                int memberId = integranteDAO.addMember(familyPlanId, body);
-                if (memberId > 0) {
-                    resp.setStatus(HttpServletResponse.SC_CREATED);
-                    resp.getWriter().write(String.format("{\"success\":true,\"message\":\"Integrante agregado exitosamente\",\"data\":{\"id\":%d}}", memberId));
-                } else {
-                    ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al agregar integrante");
-                }
-                return;
-            }
-
-            // POST /api/conditionMembers
-            if (servletPath.contains("conditionMembers")) {
-                Object memberIdObj = body.get("member_id");
-                int memberId = 1;
-                if (memberIdObj instanceof Number) memberId = ((Number) memberIdObj).intValue();
-                else if (memberIdObj instanceof String) memberId = Integer.parseInt((String) memberIdObj);
-
-                String name = (String) body.get("name");
-                String dose = (String) body.get("dose");
-
-                String sql = "INSERT INTO Enfermedad (IdIntegrante, Nombre, Medicina, Dosis) VALUES (?, ?, ?, ?)";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-                    ps.setInt(1, memberId);
-                    ps.setString(2, name);
-                    ps.setString(3, name); // Map medicine to same
-                    ps.setString(4, dose != null ? dose : "");
-                    ps.executeUpdate();
-
-                    int generatedId = 0;
-                    try (ResultSet rs = ps.getGeneratedKeys()) {
-                        if (rs.next()) {
-                            generatedId = rs.getInt(1);
-                        }
-                    }
-
-                    if (generatedId > 0) {
-                        Object conditionTypeIdObj = body.get("condition_type_id");
-                        int conditionTypeId = 1;
-                        if (conditionTypeIdObj instanceof Number) {
-                            conditionTypeId = ((Number) conditionTypeIdObj).intValue();
-                        } else if (conditionTypeIdObj instanceof String) {
-                            conditionTypeId = Integer.parseInt((String) conditionTypeIdObj);
-                        }
-                        Map<String, Object> extra = new HashMap<>();
-                        extra.put("condition_type_id", conditionTypeId);
-                        extraData.put("condition_" + generatedId, extra);
-                    }
-
-                    resp.setStatus(HttpServletResponse.SC_CREATED);
-                    resp.getWriter().write("{\"success\":true,\"message\":\"Afeccion agregada exitosamente\"}");
-                    return;
-                }
-            }
-
-            // POST /api/pets
-            if (servletPath.contains("pets")) {
-                int generatedId = mascotaDAO.insertPet(body);
-                if (generatedId > 0) {
-                    ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, Map.of("id", generatedId), "Mascota agregada exitosamente");
-                } else {
-                    ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al agregar mascota");
-                }
-                return;
-            }
-
-            // POST /api/petVaccines
-            if (servletPath.contains("petVaccines")) {
-                VaccineDTO dto = gson.fromJson(gson.toJson(body), VaccineDTO.class);
-                if (planComplementarioDAO.insertVaccine(dto) > 0) {
-                    ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, null, "Vacuna agregada exitosamente");
-                } else {
-                    ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al agregar vacuna");
-                }
-                return;
-            }
-
-            // POST /api/riskFactors
-            if (servletPath.contains("riskFactors")) {
-                try {
-                    int generatedId = vulnerabilidadDAO.addRiskFactor(body);
-                    if (generatedId > 0) {
-                        resp.setStatus(HttpServletResponse.SC_CREATED);
-                        resp.getWriter().write("{\"success\":true,\"message\":\"Factor de riesgo agregado exitosamente\"}");
-                    } else {
-                        ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al agregar factor de riesgo");
-                    }
-                } catch (SQLException e) {
-                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                    resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos\"}");
-                    e.printStackTrace();
                 }
                 return;
             }
@@ -950,74 +497,9 @@ public class PlanDetailsServlet extends HttpServlet {
                         extraData.put("resource_" + generatedId, extra);
                     }
 
-                    resp.setStatus(HttpServletResponse.SC_CREATED);
-                    resp.getWriter().write("{\"success\":true,\"message\":\"Recurso disponible agregado exitosamente\"}");
+                    ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, null, "Recurso disponible agregado exitosamente");
                     return;
                 }
-            }
-
-            // POST /api/vulnerabilityFactors
-            if (servletPath.contains("vulnerabilityFactors")) {
-                try {
-                    boolean success = vulnerabilidadDAO.addVulnerability(body);
-                    if (success) {
-                        resp.setStatus(HttpServletResponse.SC_CREATED);
-                        resp.getWriter().write("{\"success\":true,\"message\":\"Vulnerabilidad agregada exitosamente\"}");
-                    } else {
-                        ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al agregar vulnerabilidad");
-                    }
-                } catch (SQLException e) {
-                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                    resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos\"}");
-                    e.printStackTrace();
-                }
-                return;
-            }
-
-            // POST /api/riskReductionActions (Save in memory store)
-            if (servletPath.contains("riskReductionActions")) {
-                Object riskIdObj = body.get("risk_factor_id");
-                int riskId = 1;
-                if (riskIdObj instanceof Number) riskId = ((Number) riskIdObj).intValue();
-                else if (riskIdObj instanceof String && !((String) riskIdObj).isEmpty()) riskId = Integer.parseInt((String) riskIdObj);
-
-                int randId = (int) (Math.random() * 1000) + 1;
-                Map<String, Object> extra = new HashMap<>();
-                extra.put("id", randId);
-                extra.put("action", body.get("action"));
-                extra.put("member_id", body.get("member_id"));
-                extra.put("member", Map.of("names", "Encargado", "last_names", ""));
-                extra.put("end_date", body.get("end_date"));
-
-                extraData.put("risk_actions_" + riskId, extra);
-                extraData.put("reduction_action_" + randId, extra);
-
-                resp.setStatus(HttpServletResponse.SC_CREATED);
-                resp.getWriter().write("{\"success\":true,\"message\":\"Accion de reduccion agregada exitosamente\"}");
-                return;
-            }
-
-            // POST /api/housingInfo and housingGraphics (Multipart upload with real file persistence)
-            if (servletPath.contains("housingInfo") || servletPath.contains("housingGraphics")) {
-                boolean esEntorno = servletPath.contains("housingInfo");
-                int planId = extractId(body.get("family_plan_id"));
-                int typeId = esEntorno ? 2 : 1;
-                if (body.containsKey("housing_info_type_id")) {
-                    typeId = extractId(body.get("housing_info_type_id"));
-                }
-                if (pathInfo != null) {
-                    typeId = extractHousingTypeId(pathInfo);
-                }
-                int esEntornoVal = (typeId == 2) ? 1 : 0;
-                String description = body.containsKey("description") ? (String) body.get("description") : "Grafico del plan";
-
-                String savedFileName = saveUploadedFile(req);
-                if (planComplementarioDAO.saveOrUpdateHousingGraphic(planId, savedFileName, description, esEntornoVal)) {
-                    ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, null, "Archivo subido exitosamente");
-                } else {
-                    ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al guardar el croquis/gráfico");
-                }
-                return;
             }
 
             // POST /api/actionPlans
@@ -1048,18 +530,22 @@ public class PlanDetailsServlet extends HttpServlet {
                 return;
             }
 
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"success\":false,\"message\":\"Ruta POST no soportada\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "Ruta POST no soportada");
 
         } catch (Exception e) {
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            resp.getWriter().write("{\"success\":false,\"message\":\"" + e.getMessage() + "\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
             e.printStackTrace();
         }
     }
 
     @Override
-    protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+    protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        resp.setContentType("application/json");
+        resp.setCharacterEncoding("UTF-8");
+        ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "Ruta PUT no soportada");
+    }
+
+    protected void doPatch(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
 
@@ -1071,159 +557,71 @@ public class PlanDetailsServlet extends HttpServlet {
             Map<String, Object> body = gson.fromJson(reader, Map.class);
             if (body == null) body = new HashMap<>();
 
-            int idVal = Integer.parseInt(pathInfo.substring(1));
+            // PATCH /api/familyPlans/{id}/identify
+            if (servletPath.contains("familyPlans") && pathInfo != null && pathInfo.endsWith("/identify")) {
+                String[] segments = pathInfo.split("/");
+                int planId = Integer.parseInt(segments[1]);
 
-            // PUT /api/members/{id}
-            if (servletPath.contains("members")) {
-                boolean updated = integranteDAO.updateMember(idVal, body);
+                boolean updated = planFamiliarDAO.updateIdentification(planId, body);
                 if (updated) {
-                    resp.getWriter().write("{\"success\":true,\"message\":\"Integrante actualizado exitosamente\"}");
+                    ResponseUtil.sendSuccess(resp, "Datos de identificacion actualizados");
                 } else {
-                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Integrante no encontrado");
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan familiar no encontrado");
                 }
                 return;
             }
 
-            // PUT /api/conditionMembers/{id}
-            if (servletPath.contains("conditionMembers")) {
-                String name = (String) body.get("name");
-                String dose = (String) body.get("dose");
+            // PATCH /api/familyPlans/{id}/change-status
+            if (servletPath.contains("familyPlans") && pathInfo != null && pathInfo.endsWith("/change-status")) {
+                String[] segments = pathInfo.split("/");
+                int planId = Integer.parseInt(segments[1]);
 
-                String sql = "UPDATE Enfermedad SET Nombre = ?, Medicina = ?, Dosis = ? WHERE IdEnfermedad = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setString(1, name);
-                    ps.setString(2, name);
-                    ps.setString(3, dose != null ? dose : "");
-                    ps.setInt(4, idVal);
-                    ps.executeUpdate();
+                Object statusObj = body.get("status_plan_id");
+                int statusId = 1;
+                if (statusObj instanceof Number) statusId = ((Number) statusObj).intValue();
 
-                    Object conditionTypeIdObj = body.get("condition_type_id");
-                    int conditionTypeId = 1;
-                    if (conditionTypeIdObj instanceof Number) {
-                        conditionTypeId = ((Number) conditionTypeIdObj).intValue();
-                    } else if (conditionTypeIdObj instanceof String) {
-                        conditionTypeId = Integer.parseInt((String) conditionTypeIdObj);
-                    }
-                    Map<String, Object> extra = extraData.computeIfAbsent("condition_" + idVal, k -> new HashMap<>());
-                    extra.put("condition_type_id", conditionTypeId);
+                String comment = (String) body.get("comentary");
 
-                    resp.getWriter().write("{\"success\":true,\"message\":\"Afeccion actualizada exitosamente\"}");
-                    return;
-                }
-            }
-
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"success\":false,\"message\":\"Ruta PUT no soportada\"}");
-
-        } catch (Exception e) {
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            resp.getWriter().write("{\"success\":false,\"message\":\"" + e.getMessage() + "\"}");
-            e.printStackTrace();
-        }
-    }
-
-    protected void doPatch(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        resp.setContentType("application/json");
-        resp.setCharacterEncoding("UTF-8");
-
-        String servletPath = req.getServletPath();
-        String pathInfo = req.getPathInfo();
-
-        try {
-                BufferedReader reader = req.getReader();
-                Map<String, Object> body = gson.fromJson(reader, Map.class);
-                if (body == null) body = new HashMap<>();
-
-                // PATCH /api/familyPlans/{id}/identify
-                if (servletPath.contains("familyPlans") && pathInfo.endsWith("/identify")) {
-                    String[] segments = pathInfo.split("/");
-                    int planId = Integer.parseInt(segments[1]);
-
-                    boolean updated = planFamiliarDAO.updateIdentification(planId, body);
-                    if (updated) {
-                        ResponseUtil.sendSuccess(resp, "Datos de identificacion actualizados");
-                    } else {
-                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan familiar no encontrado");
-                    }
-                    return;
-                }
-
-                // PATCH /api/familyPlans/{id}/change-status
-                if (servletPath.contains("familyPlans") && pathInfo.endsWith("/change-status")) {
-                    String[] segments = pathInfo.split("/");
-                    int planId = Integer.parseInt(segments[1]);
-
-                    Object statusObj = body.get("status_plan_id");
-                    int statusId = 1;
-                    if (statusObj instanceof Number) statusId = ((Number) statusObj).intValue();
-
-                    String comment = (String) body.get("comentary");
-
-                    boolean updated = planFamiliarDAO.changeStatus(planId, statusId, comment);
-                    if (updated) {
-                        ResponseUtil.sendSuccess(resp, "Estado de plan actualizado exitosamente");
-                    } else {
-                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan familiar no encontrado");
-                    }
-                    return;
-                }
-
-                // PATCH /api/familyPlans/{id}/change-family-type
-                if (servletPath.contains("familyPlans") && pathInfo.endsWith("/change-family-type")) {
-                    String[] segments = pathInfo.split("/");
-                    int planId = Integer.parseInt(segments[1]);
-
-                    Object ftIdObj = body.get("family_type_id");
-                    int familyTypeId = 3;
-                    if (ftIdObj instanceof Number) familyTypeId = ((Number) ftIdObj).intValue();
-                    else if (ftIdObj instanceof String) familyTypeId = Integer.parseInt((String) ftIdObj);
-
-                    boolean updated = planFamiliarDAO.changeFamilyType(planId, familyTypeId);
-                    if (updated) {
-                        ResponseUtil.sendSuccess(resp, "Tipo de familia actualizado exitosamente");
-                    } else {
-                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan familiar no encontrado");
-                    }
-                    return;
-                }
-
-                // PATCH /api/familyPlans/status/{id}
-                if (servletPath.contains("familyPlans") && pathInfo.startsWith("/status/")) {
-                    int planId = Integer.parseInt(pathInfo.substring(8));
-                    Object statusObj = body.get("status_plan_id");
-                    int statusId = 1;
-                    if (statusObj instanceof Number) statusId = ((Number) statusObj).intValue();
-
-                    boolean updated = planFamiliarDAO.changeStatus(planId, statusId, null);
-                    if (updated) {
-                        ResponseUtil.sendSuccess(resp, "Estado de plan actualizado exitosamente");
-                    } else {
-                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan familiar no encontrado");
-                    }
-                    return;
-                }
-
-                // PATCH /api/pets/{id}
-                if (servletPath.contains("pets")) {
-                int petId = Integer.parseInt(pathInfo.substring(1));
-                boolean updated = mascotaDAO.updatePet(petId, body);
+                boolean updated = planFamiliarDAO.changeStatus(planId, statusId, comment);
                 if (updated) {
-                    ResponseUtil.sendSuccess(resp, "Mascota actualizada exitosamente");
+                    ResponseUtil.sendSuccess(resp, "Estado de plan actualizado exitosamente");
                 } else {
-                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Mascota no encontrada");
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan familiar no encontrado");
                 }
                 return;
             }
 
-            // PATCH /api/petVaccines/{id}
-            if (servletPath.contains("petVaccines")) {
-                int vaccineId = extractId(pathInfo, null);
-                VaccineDTO dto = gson.fromJson(gson.toJson(body), VaccineDTO.class);
-                if (planComplementarioDAO.updateVaccine(vaccineId, dto)) {
-                    ResponseUtil.sendSuccess(resp, "Vacuna actualizada exitosamente");
+            // PATCH /api/familyPlans/{id}/change-family-type
+            if (servletPath.contains("familyPlans") && pathInfo != null && pathInfo.endsWith("/change-family-type")) {
+                String[] segments = pathInfo.split("/");
+                int planId = Integer.parseInt(segments[1]);
+
+                Object ftIdObj = body.get("family_type_id");
+                int familyTypeId = 3;
+                if (ftIdObj instanceof Number) familyTypeId = ((Number) ftIdObj).intValue();
+                else if (ftIdObj instanceof String) familyTypeId = Integer.parseInt((String) ftIdObj);
+
+                boolean updated = planFamiliarDAO.changeFamilyType(planId, familyTypeId);
+                if (updated) {
+                    ResponseUtil.sendSuccess(resp, "Tipo de familia actualizado exitosamente");
                 } else {
-                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Vacuna no encontrada");
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan familiar no encontrado");
+                }
+                return;
+            }
+
+            // PATCH /api/familyPlans/status/{id}
+            if (servletPath.contains("familyPlans") && pathInfo != null && pathInfo.startsWith("/status/")) {
+                int planId = Integer.parseInt(pathInfo.substring(8));
+                Object statusObj = body.get("status_plan_id");
+                int statusId = 1;
+                if (statusObj instanceof Number) statusId = ((Number) statusObj).intValue();
+
+                boolean updated = planFamiliarDAO.changeStatus(planId, statusId, null);
+                if (updated) {
+                    ResponseUtil.sendSuccess(resp, "Estado de plan actualizado exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan familiar no encontrado");
                 }
                 return;
             }
@@ -1277,56 +675,7 @@ public class PlanDetailsServlet extends HttpServlet {
                 Map<String, Object> extra = extraData.computeIfAbsent("resource_" + idVal, k -> new HashMap<>());
                 extra.put("description", description != null ? description : "");
 
-                resp.getWriter().write("{\"success\":true,\"message\":\"Recurso disponible actualizado exitosamente\"}");
-                return;
-            }
-
-            // PATCH /api/riskFactors/{id}
-            if (servletPath.contains("riskFactors")) {
-                int idVal = Integer.parseInt(pathInfo.substring(1));
-                try {
-                    boolean success = vulnerabilidadDAO.updateRiskFactor(idVal, body);
-                    if (success) {
-                        resp.getWriter().write("{\"success\":true,\"message\":\"Factor de riesgo actualizado exitosamente\"}");
-                    } else {
-                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Factor de riesgo no encontrado");
-                    }
-                } catch (SQLException e) {
-                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                    resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos\"}");
-                    e.printStackTrace();
-                }
-                return;
-            }
-
-            // PATCH /api/vulnerabilityFactors/{id}
-            if (servletPath.contains("vulnerabilityFactors")) {
-                int idVal = Integer.parseInt(pathInfo.substring(1));
-                try {
-                    boolean success = vulnerabilidadDAO.updateVulnerability(idVal, body);
-                    if (success) {
-                        resp.getWriter().write("{\"success\":true,\"message\":\"Vulnerabilidad actualizada exitosamente\"}");
-                    } else {
-                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Vulnerabilidad no encontrada");
-                    }
-                } catch (SQLException e) {
-                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                    resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos\"}");
-                    e.printStackTrace();
-                }
-                return;
-            }
-
-            // PATCH /api/riskReductionActions/{id}
-            if (servletPath.contains("riskReductionActions")) {
-                int idVal = Integer.parseInt(pathInfo.substring(1));
-                Map<String, Object> extra = extraData.getOrDefault("reduction_action_" + idVal, new HashMap<>());
-                extra.put("action", body.get("action"));
-                extra.put("member_id", body.get("member_id"));
-                extra.put("end_date", body.get("end_date"));
-                extraData.put("reduction_action_" + idVal, extra);
-
-                resp.getWriter().write("{\"success\":true,\"message\":\"Accion de reduccion actualizada exitosamente\"}");
+                ResponseUtil.sendSuccess(resp, "Recurso disponible actualizado exitosamente");
                 return;
             }
 
@@ -1343,30 +692,16 @@ public class PlanDetailsServlet extends HttpServlet {
                 return;
             }
 
-            // PATCH /api/housingGraphics/{id}/description
-            if (servletPath.contains("housingGraphics") && pathInfo != null && pathInfo.endsWith("/description")) {
-                int graficoId = extractId(pathInfo, null);
-                String description = (String) body.get("description");
-                if (planComplementarioDAO.updateHousingGraphicDescription(graficoId, description)) {
-                    ResponseUtil.sendSuccess(resp, "Descripción de gráfico actualizada exitosamente");
-                } else {
-                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Gráfico no encontrado");
-                }
-                return;
-            }
-
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"success\":false,\"message\":\"Ruta PATCH no soportada\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "Ruta PATCH no soportada");
 
         } catch (Exception e) {
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            resp.getWriter().write("{\"success\":false,\"message\":\"" + e.getMessage() + "\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
             e.printStackTrace();
         }
     }
 
     @Override
-    protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+    protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
 
@@ -1375,68 +710,6 @@ public class PlanDetailsServlet extends HttpServlet {
 
         try {
             int idVal = Integer.parseInt(pathInfo.substring(1));
-
-            // DELETE /api/members/{id}
-            if (servletPath.contains("members")) {
-                boolean deleted = integranteDAO.deleteMember(idVal);
-                if (deleted) {
-                    resp.getWriter().write("{\"success\":true,\"message\":\"Integrante eliminado exitosamente\"}");
-                } else {
-                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Integrante no encontrado");
-                }
-                return;
-            }
-
-            // DELETE /api/conditionMembers/{id}
-            if (servletPath.contains("conditionMembers")) {
-                String sql = "DELETE FROM Enfermedad WHERE IdEnfermedad = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setInt(1, idVal);
-                    ps.executeUpdate();
-                }
-                extraData.remove("condition_" + idVal);
-                resp.getWriter().write("{\"success\":true,\"message\":\"Afeccion eliminada exitosamente\"}");
-                return;
-            }
-
-            // DELETE /api/pets/{id}
-            if (servletPath.contains("pets")) {
-                boolean deleted = mascotaDAO.deletePet(idVal);
-                if (deleted) {
-                    ResponseUtil.sendSuccess(resp, "Mascota eliminada exitosamente");
-                } else {
-                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Mascota no encontrada");
-                }
-                return;
-            }
-
-            // DELETE /api/petVaccines/{id}
-            if (servletPath.contains("petVaccines")) {
-                if (planComplementarioDAO.deleteVaccine(idVal)) {
-                    ResponseUtil.sendSuccess(resp, "Vacuna eliminada exitosamente");
-                } else {
-                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Vacuna no encontrada");
-                }
-                return;
-            }
-
-            // DELETE /api/riskFactors/{id}
-            if (servletPath.contains("riskFactors")) {
-                try {
-                    boolean success = vulnerabilidadDAO.deleteRiskFactor(idVal);
-                    if (success) {
-                        resp.getWriter().write("{\"success\":true,\"message\":\"Factor de riesgo eliminado exitosamente\"}");
-                    } else {
-                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Factor de riesgo no encontrado");
-                    }
-                } catch (SQLException e) {
-                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                    resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos: " + e.getMessage() + "\"}");
-                    e.printStackTrace();
-                }
-                return;
-            }
 
             // DELETE /api/availableResources/{id}
             if (servletPath.contains("availableResources")) {
@@ -1447,24 +720,7 @@ public class PlanDetailsServlet extends HttpServlet {
                     ps.executeUpdate();
                 }
                 extraData.remove("resource_" + idVal);
-                resp.getWriter().write("{\"success\":true,\"message\":\"Recurso disponible eliminado exitosamente\"}");
-                return;
-            }
-
-            // DELETE /api/vulnerabilityFactors/{id}
-            if (servletPath.contains("vulnerabilityFactors")) {
-                try {
-                    boolean success = vulnerabilidadDAO.deleteVulnerability(idVal);
-                    if (success) {
-                        resp.getWriter().write("{\"success\":true,\"message\":\"Vulnerabilidad eliminada exitosamente\"}");
-                    } else {
-                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Vulnerabilidad no encontrada");
-                    }
-                } catch (SQLException e) {
-                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                    resp.getWriter().write("{\"success\":false,\"message\":\"Error de base de datos: " + e.getMessage() + "\"}");
-                    e.printStackTrace();
-                }
+                ResponseUtil.sendSuccess(resp, "Recurso disponible eliminado exitosamente");
                 return;
             }
 
@@ -1478,44 +734,12 @@ public class PlanDetailsServlet extends HttpServlet {
                 return;
             }
 
-            // DELETE /api/housingGraphics/{id}
-            if (servletPath.contains("housingGraphics")) {
-                HousingInfoDTO dto = planComplementarioDAO.getHousingGraphicById(idVal);
-                if (dto != null && planComplementarioDAO.deleteHousingGraphic(idVal)) {
-                    String fileName = dto.getPath();
-                    if (fileName != null && !fileName.equals("mock_graphic.png")) {
-                        java.io.File file = new java.io.File("/home/dylan/Documents/projects/df/DefensaCivilAPI/storage", fileName);
-                        if (file.exists() && file.isFile()) {
-                            file.delete();
-                        }
-                    }
-                    ResponseUtil.sendSuccess(resp, "Gráfico de vivienda eliminado exitosamente");
-                } else {
-                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Gráfico no encontrado");
-                }
-                return;
-            }
-
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"success\":false,\"message\":\"Ruta DELETE no soportada\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "Ruta DELETE no soportada");
 
         } catch (Exception e) {
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            resp.getWriter().write("{\"success\":false,\"message\":\"" + e.getMessage() + "\"}");
+            ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
             e.printStackTrace();
         }
-    }
-
-    private String getStatusName(int statusId) {
-        return switch (statusId) {
-            case 1 -> "Creado";
-            case 3 -> "En proceso";
-            case 4 -> "En Revision";
-            case 5 -> "Devuelto con observaciones";
-            case 6 -> "Rechazado";
-            case 7 -> "Completado";
-            default -> "Creado";
-        };
     }
 
     private int extractId(String pathInfo, String prefix) {
@@ -1562,35 +786,5 @@ public class PlanDetailsServlet extends HttpServlet {
             }
         }
         return 0;
-    }
-
-    private String saveUploadedFile(HttpServletRequest req) {
-        String savedFileName = "mock_graphic.png";
-        try {
-            jakarta.servlet.http.Part filePart = req.getPart("path");
-            if (filePart != null) {
-                String fileName = filePart.getSubmittedFileName();
-                if (fileName != null && !fileName.isEmpty()) {
-                    savedFileName = "upload_" + System.currentTimeMillis() + "_" + fileName;
-                    String storageDirPath = "/home/dylan/Documents/projects/df/DefensaCivilAPI/storage";
-                    java.io.File storageDir = new java.io.File(storageDirPath);
-                    if (!storageDir.exists()) {
-                        storageDir.mkdirs();
-                    }
-                    java.io.File fileToSave = new java.io.File(storageDir, savedFileName);
-                    try (java.io.InputStream input = filePart.getInputStream();
-                         java.io.OutputStream output = new java.io.FileOutputStream(fileToSave)) {
-                        byte[] buffer = new byte[4096];
-                        int bytesRead;
-                        while ((bytesRead = input.read(buffer)) != -1) {
-                            output.write(buffer, 0, bytesRead);
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            // Fallback to default
-        }
-        return savedFileName;
     }
 }

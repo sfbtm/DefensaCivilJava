@@ -293,4 +293,89 @@ public class IntegranteDAOImpl implements IntegranteDAO {
             }
         }
     }
+
+    @Override
+    public List<Map<String, Object>> getConditionsByMember(int memberId) throws SQLException {
+        List<Map<String, Object>> list = new ArrayList<>();
+        String sql = "SELECT IdEnfermedad, Nombre, Medicina, Dosis FROM Enfermedad WHERE IdIntegrante = ?";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, memberId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> cond = new HashMap<>();
+                    int condId = rs.getInt("IdEnfermedad");
+                    cond.put("id", condId);
+                    cond.put("name", rs.getString("Nombre"));
+                    cond.put("dose", rs.getString("Dosis"));
+                    cond.put("medicine", rs.getString("Medicina"));
+
+                    // Mapear el mock type para acoplar con tu frontend
+                    cond.put("condition_type_id", 1);
+                    cond.put("condition_type", Map.of("id", 1, "name", "Diabetes"));
+                    list.add(cond);
+                }
+            }
+        }
+        return list;
+    }
+
+    @Override
+    public Map<String, Object> getConditionById(int conditionId) throws SQLException {
+        String sql = "SELECT IdEnfermedad, IdIntegrante, Nombre, Medicina, Dosis FROM Enfermedad WHERE IdEnfermedad = ?";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, conditionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Map<String, Object> cond = new HashMap<>();
+                    cond.put("id", rs.getInt("IdEnfermedad"));
+                    cond.put("name", rs.getString("Nombre"));
+                    cond.put("dose", rs.getString("Dosis"));
+                    cond.put("medicine", rs.getString("Medicina"));
+                    cond.put("condition_type_id", 1);
+                    cond.put("condition_type", Map.of("id", 1, "name", "Diabetes"));
+                    cond.put("member_id", rs.getInt("IdIntegrante"));
+                    return cond;
+                }
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public boolean addCondition(int memberId, String name, String dose) throws SQLException {
+        String sql = "INSERT INTO Enfermedad (IdIntegrante, Nombre, Medicina, Dosis) VALUES (?, ?, ?, ?)";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, memberId);
+            ps.setString(2, name);
+            ps.setString(3, name);
+            ps.setString(4, dose != null ? dose : "");
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    @Override
+    public boolean updateCondition(int conditionId, String name, String dose) throws SQLException {
+        String sql = "UPDATE Enfermedad SET Nombre = ?, Medicina = ?, Dosis = ? WHERE IdEnfermedad = ?";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, name);
+            ps.setString(2, name);
+            ps.setString(3, dose != null ? dose : "");
+            ps.setInt(4, conditionId);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    @Override
+    public boolean deleteCondition(int conditionId) throws SQLException {
+        String sql = "DELETE FROM Enfermedad WHERE IdEnfermedad = ?";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, conditionId);
+            return ps.executeUpdate() > 0;
+        }
+    }
 }

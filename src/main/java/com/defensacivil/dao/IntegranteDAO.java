@@ -12,4 +12,12 @@ public interface IntegranteDAO {
     int addMember(int familyPlanId, Map<String, Object> body) throws SQLException;
     boolean updateMember(int memberId, Map<String, Object> body) throws SQLException;
     boolean deleteMember(int memberId) throws SQLException;
+
+
+    List<Map<String, Object>> getConditionsByMember(int memberId) throws SQLException;
+    Map<String, Object> getConditionById(int conditionId) throws SQLException;
+    boolean addCondition(int memberId, String name, String dose) throws SQLException;
+    boolean updateCondition(int conditionId, String name, String dose) throws SQLException;
+    boolean deleteCondition(int conditionId) throws SQLException;
+
 }
