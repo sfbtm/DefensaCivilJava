@@ -10,6 +10,12 @@ import com.defensacivil.dao.IntegranteDAO;
 import com.defensacivil.dao.IntegranteDAOImpl;
 import com.defensacivil.dao.VulnerabilidadDAO;
 import com.defensacivil.dao.VulnerabilidadDAOImpl;
+import com.defensacivil.dao.PlanComplementarioDAO;
+import com.defensacivil.dao.PlanComplementarioDAOImpl;
+import com.defensacivil.dto.HousingInfoDTO;
+import com.defensacivil.dto.ActionPlanDTO;
+import com.defensacivil.dto.ActionDTO;
+import com.defensacivil.dto.VaccineDTO;
 import com.google.gson.Gson;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.MultipartConfig;
@@ -67,6 +73,7 @@ public class PlanDetailsServlet extends HttpServlet {
     private final PlanFamiliarDAO planFamiliarDAO = new PlanFamiliarDAOImpl(extraData);
     private final IntegranteDAO integranteDAO = new IntegranteDAOImpl(extraData);
     private final VulnerabilidadDAO vulnerabilidadDAO = new VulnerabilidadDAOImpl(extraData);
+    private final PlanComplementarioDAO planComplementarioDAO = new PlanComplementarioDAOImpl(extraData);
 
     @Override
     protected void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -456,20 +463,19 @@ public class PlanDetailsServlet extends HttpServlet {
             // PET VACCINES
             if (servletPath.contains("petVaccines")) {
                 if (pathInfo != null && pathInfo.startsWith("/pet/")) {
-                    int petId = Integer.parseInt(pathInfo.substring(5));
-                    List<Map<String, Object>> list = mascotaDAO.getVaccinesByPet(petId);
+                    int petId = extractId(pathInfo, "/pet");
+                    List<VaccineDTO> list = planComplementarioDAO.getVaccinesByPet(petId);
                     ResponseUtil.sendSuccess(resp, list);
-                    return;
-                } else if (pathInfo != null && !pathInfo.equals("/")) {
-                    int idVal = Integer.parseInt(pathInfo.substring(1));
-                    Map<String, Object> vac = mascotaDAO.getVaccineById(idVal);
-                    if (vac != null) {
-                        ResponseUtil.sendSuccess(resp, vac);
+                } else {
+                    int idVal = extractId(pathInfo, null);
+                    VaccineDTO dto = planComplementarioDAO.getVaccineById(idVal);
+                    if (dto != null) {
+                        ResponseUtil.sendSuccess(resp, dto);
                     } else {
                         ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Vacuna no encontrada");
                     }
-                    return;
                 }
+                return;
             }
 
             // RISK FACTORS
@@ -611,191 +617,69 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // HOUSING INFO (GraficoVivienda with EsEntorno = 1 for type 2, or 0 for type 1)
             if (servletPath.contains("housingInfo")) {
-                if (pathInfo != null && !pathInfo.equals("/")) {
-                    // Path format: /housingInfo/{planId}/type/{typeId}
-                    String[] segments = pathInfo.split("/");
-                    int planId = Integer.parseInt(segments[1]);
-                    int typeId = 2; // Default: 2 (Entorno)
-                    if (segments.length > 3) {
-                        try {
-                            typeId = Integer.parseInt(segments[3]);
-                        } catch (NumberFormatException e) {
-                            // Ignored
-                        }
-                    }
-                    int esEntornoVal = (typeId == 2) ? 1 : 0;
-
-                    String sql = "SELECT IdGrafico, RutaImagen FROM GraficoVivienda WHERE IdPlanFamiliar = ? AND EsEntorno = ? LIMIT 1";
-                    Map<String, Object> item = null;
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, planId);
-                        ps.setInt(2, esEntornoVal);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) {
-                                item = new HashMap<>();
-                                item.put("id", rs.getInt("IdGrafico"));
-                                item.put("path", rs.getString("RutaImagen"));
-                                item.put("family_plan_id", planId);
-                            }
-                        }
-                    }
-                    if (item != null) {
-                        resp.getWriter().write(gson.toJson(Map.of("data", item)));
-                    } else {
-                        resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                        resp.getWriter().write("{\"success\":false,\"data\":null}");
-                    }
-                    return;
+                int planId = extractId(pathInfo, null);
+                int typeId = extractHousingTypeId(pathInfo);
+                HousingInfoDTO dto = planComplementarioDAO.getHousingInfo(planId, typeId);
+                if (dto != null) {
+                    ResponseUtil.sendSuccess(resp, dto);
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Información de vivienda no encontrada");
                 }
+                return;
             }
 
             // HOUSING GRAPHICS (GraficoVivienda with EsEntorno = 0)
             if (servletPath.contains("housingGraphics")) {
                 if (pathInfo != null && pathInfo.startsWith("/familyPlan/")) {
-                    int planId = Integer.parseInt(pathInfo.substring(12));
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = "SELECT IdGrafico, RutaImagen, Descripcion FROM GraficoVivienda WHERE IdPlanFamiliar = ? AND EsEntorno = 0";
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, planId);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                Map<String, Object> item = new HashMap<>();
-                                item.put("id", rs.getInt("IdGrafico"));
-                                item.put("path", rs.getString("RutaImagen"));
-                                item.put("description", rs.getString("Descripcion") != null ? rs.getString("Descripcion") : "");
-                                list.add(item);
-                            }
-                        }
+                    int planId = extractId(pathInfo, "/familyPlan");
+                    List<HousingInfoDTO> list = planComplementarioDAO.getHousingGraphicsByPlan(planId);
+                    ResponseUtil.sendSuccess(resp, list);
+                } else {
+                    int idVal = extractId(pathInfo, null);
+                    HousingInfoDTO dto = planComplementarioDAO.getHousingGraphicById(idVal);
+                    if (dto != null) {
+                        ResponseUtil.sendSuccess(resp, dto);
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Gráfico no encontrado");
                     }
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
-                    return;
-
-                } else if (pathInfo != null && !pathInfo.equals("/")) {
-                    int idVal = Integer.parseInt(pathInfo.substring(1));
-                    String sql = "SELECT IdGrafico, RutaImagen, Descripcion, IdPlanFamiliar FROM GraficoVivienda WHERE IdGrafico = ?";
-                    Map<String, Object> item = new HashMap<>();
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, idVal);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) {
-                                item.put("id", rs.getInt("IdGrafico"));
-                                item.put("path", rs.getString("RutaImagen"));
-                                item.put("description", rs.getString("Descripcion") != null ? rs.getString("Descripcion") : "");
-                                item.put("family_plan_id", rs.getInt("IdPlanFamiliar"));
-                            }
-                        }
-                    }
-                    resp.getWriter().write(gson.toJson(Map.of("data", item)));
-                    return;
                 }
+                return;
             }
 
             // ACTION PLANS (PlanAccion)
             if (servletPath.contains("actionPlans")) {
                 if (pathInfo != null && pathInfo.startsWith("/familyPlan/boolean/")) {
-                    int planId = Integer.parseInt(pathInfo.substring(20));
-                    boolean exists = false;
-                    String sql = "SELECT COUNT(*) FROM PlanAccion pa JOIN FactorRiesgo fr ON pa.IdFactorRiesgo = fr.IdFactorRiesgo WHERE fr.IdPlanFamiliar = ?";
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, planId);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) exists = rs.getInt(1) > 0;
-                        }
-                    }
-                    resp.getWriter().write(gson.toJson(Map.of("data", exists)));
-                    return;
-
+                    int planId = extractId(pathInfo, "/familyPlan/boolean");
+                    boolean exists = planComplementarioDAO.hasActionPlan(planId);
+                    ResponseUtil.sendSuccess(resp, exists);
                 } else if (pathInfo != null && pathInfo.startsWith("/familyPlan/")) {
-                    int planId = Integer.parseInt(pathInfo.substring(12));
-                    Map<String, Object> item = null;
-                    String sql = "SELECT pa.IdPlanAccion, pa.IdCoordinador FROM PlanAccion pa JOIN FactorRiesgo fr ON pa.IdFactorRiesgo = fr.IdFactorRiesgo WHERE fr.IdPlanFamiliar = ? LIMIT 1";
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, planId);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) {
-                                item = new HashMap<>();
-                                item.put("id", rs.getInt("IdPlanAccion"));
-                                item.put("family_plan_id", planId);
-                                item.put("coordinator_id", rs.getInt("IdCoordinador"));
-                            }
-                        }
-                    }
-                    if (item == null) {
-                        // Create layout if not exists
-                        resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                        resp.getWriter().write("{\"success\":false}");
+                    int planId = extractId(pathInfo, "/familyPlan");
+                    ActionPlanDTO dto = planComplementarioDAO.getActionPlanByPlan(planId);
+                    if (dto != null) {
+                        ResponseUtil.sendSuccess(resp, dto);
                     } else {
-                        resp.getWriter().write(gson.toJson(Map.of("data", item)));
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Plan de acción no encontrado");
                     }
-                    return;
                 }
+                return;
             }
 
             // ACTION PLAN ACTIONS (Accion)
             if (servletPath.contains("actionPlanActions")) {
                 if (pathInfo != null && pathInfo.startsWith("/actionPlan/")) {
-                    int planAccionId = Integer.parseInt(pathInfo.substring(12));
-                    List<Map<String, Object>> list = new ArrayList<>();
-                    String sql = """
-                        SELECT a.IdAccion, a.IdResponsable, a.Etapa, a.Descripcion, i.Nombre, i.Apellido
-                        FROM Accion a
-                        JOIN Integrante i ON a.IdResponsable = i.IdIntegrante
-                        WHERE a.IdPlanAccion = ?
-                        """;
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, planAccionId);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                Map<String, Object> item = new HashMap<>();
-                                item.put("id", rs.getInt("IdAccion"));
-                                item.put("description", rs.getString("Descripcion"));
-                                item.put("stage", rs.getString("Etapa"));
-                                item.put("member_id", rs.getInt("IdResponsable"));
-                                item.put("member", Map.of(
-                                    "names", rs.getString("Nombre"),
-                                    "last_names", rs.getString("Apellido")
-                                ));
-                                list.add(item);
-                            }
-                        }
+                    int actionPlanId = extractId(pathInfo, "/actionPlan");
+                    List<ActionDTO> list = planComplementarioDAO.getActionsByActionPlan(actionPlanId);
+                    ResponseUtil.sendSuccess(resp, list);
+                } else {
+                    int idVal = extractId(pathInfo, null);
+                    ActionDTO dto = planComplementarioDAO.getActionById(idVal);
+                    if (dto != null) {
+                        ResponseUtil.sendSuccess(resp, dto);
+                    } else {
+                        ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Acción no encontrada");
                     }
-                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
-                    return;
-
-                } else if (pathInfo != null && !pathInfo.equals("/")) {
-                    int idVal = Integer.parseInt(pathInfo.substring(1));
-                    String sql = """
-                        SELECT a.IdAccion, a.IdResponsable, a.Etapa, a.Descripcion, i.Nombre, i.Apellido
-                        FROM Accion a
-                        JOIN Integrante i ON a.IdResponsable = i.IdIntegrante
-                        WHERE a.IdAccion = ?
-                        """;
-                    Map<String, Object> item = new HashMap<>();
-                    try (Connection conn = DatabaseConfig.getConnection();
-                         PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, idVal);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            if (rs.next()) {
-                                item.put("id", rs.getInt("IdAccion"));
-                                item.put("description", rs.getString("Descripcion"));
-                                item.put("stage", rs.getString("Etapa"));
-                                item.put("member_id", rs.getInt("IdResponsable"));
-                                item.put("member", Map.of(
-                                    "names", rs.getString("Nombre"),
-                                    "last_names", rs.getString("Apellido")
-                                ));
-                            }
-                        }
-                    }
-                    resp.getWriter().write(gson.toJson(Map.of("data", item)));
-                    return;
                 }
+                return;
             }
 
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
@@ -981,8 +865,8 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // POST /api/petVaccines
             if (servletPath.contains("petVaccines")) {
-                int generatedId = mascotaDAO.insertVaccine(body);
-                if (generatedId > 0) {
+                VaccineDTO dto = gson.fromJson(gson.toJson(body), VaccineDTO.class);
+                if (planComplementarioDAO.insertVaccine(dto) > 0) {
                     ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, null, "Vacuna agregada exitosamente");
                 } else {
                     ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al agregar vacuna");
@@ -1116,176 +1000,52 @@ public class PlanDetailsServlet extends HttpServlet {
             // POST /api/housingInfo and housingGraphics (Multipart upload with real file persistence)
             if (servletPath.contains("housingInfo") || servletPath.contains("housingGraphics")) {
                 boolean esEntorno = servletPath.contains("housingInfo");
-                Object planIdObj = body.get("family_plan_id");
-                int planId = 1;
-                if (planIdObj instanceof Number) planId = ((Number) planIdObj).intValue();
-                else if (planIdObj instanceof String) planId = Integer.parseInt((String) planIdObj);
-
-                int typeId = esEntorno ? 2 : 1; // Default: 2 (Entorno) for housingInfo
-                Object typeIdObj = body.get("housing_info_type_id");
-                if (typeIdObj instanceof Number) typeId = ((Number) typeIdObj).intValue();
-                else if (typeIdObj instanceof String && !((String) typeIdObj).isEmpty()) typeId = Integer.parseInt((String) typeIdObj);
-
-                if (pathInfo != null && pathInfo.length() > 1) {
-                    String[] segments = pathInfo.split("/");
-                    if (segments.length > 3) {
-                        try {
-                            typeId = Integer.parseInt(segments[3]);
-                        } catch (NumberFormatException e) {
-                            // Ignored
-                        }
-                    }
+                int planId = extractId(body.get("family_plan_id"));
+                int typeId = esEntorno ? 2 : 1;
+                if (body.containsKey("housing_info_type_id")) {
+                    typeId = extractId(body.get("housing_info_type_id"));
+                }
+                if (pathInfo != null) {
+                    typeId = extractHousingTypeId(pathInfo);
                 }
                 int esEntornoVal = (typeId == 2) ? 1 : 0;
-
                 String description = body.containsKey("description") ? (String) body.get("description") : "Grafico del plan";
 
-                String savedFileName = "mock_graphic.png";
-                jakarta.servlet.http.Part filePart = null;
-                try {
-                    filePart = req.getPart("path");
-                } catch (Exception e) {
-                    // Ignored
+                String savedFileName = saveUploadedFile(req);
+                if (planComplementarioDAO.saveOrUpdateHousingGraphic(planId, savedFileName, description, esEntornoVal)) {
+                    ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, null, "Archivo subido exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al guardar el croquis/gráfico");
                 }
-                if (filePart != null) {
-                    String fileName = filePart.getSubmittedFileName();
-                    if (fileName != null && !fileName.isEmpty()) {
-                        savedFileName = "upload_" + System.currentTimeMillis() + "_" + fileName;
-                        String storageDirPath = "/home/dylan/Documents/projects/df/DefensaCivilAPI/storage";
-                        java.io.File storageDir = new java.io.File(storageDirPath);
-                        if (!storageDir.exists()) {
-                            storageDir.mkdirs();
-                        }
-                        java.io.File fileToSave = new java.io.File(storageDir, savedFileName);
-                        try (java.io.InputStream input = filePart.getInputStream();
-                             java.io.OutputStream output = new java.io.FileOutputStream(fileToSave)) {
-                            byte[] buffer = new byte[4096];
-                            int bytesRead;
-                            while ((bytesRead = input.read(buffer)) != -1) {
-                                output.write(buffer, 0, bytesRead);
-                            }
-                        }
-                    }
-                }
-
-                try (Connection conn = DatabaseConfig.getConnection()) {
-                    boolean exists = false;
-                    // Only check exists if it's housingInfo (esEntorno is true)
-                    if (esEntorno) {
-                        String checkSql = "SELECT IdGrafico FROM GraficoVivienda WHERE IdPlanFamiliar = ? AND EsEntorno = ?";
-                        try (PreparedStatement checkPs = conn.prepareStatement(checkSql)) {
-                            checkPs.setInt(1, planId);
-                            checkPs.setInt(2, esEntornoVal);
-                            try (ResultSet rs = checkPs.executeQuery()) {
-                                if (rs.next()) {
-                                    exists = true;
-                                }
-                            }
-                        }
-                    }
-
-                    if (exists) {
-                        String updateSql = "UPDATE GraficoVivienda SET RutaImagen = ?, Descripcion = ? WHERE IdPlanFamiliar = ? AND EsEntorno = ?";
-                        try (PreparedStatement updatePs = conn.prepareStatement(updateSql)) {
-                            updatePs.setString(1, savedFileName);
-                            updatePs.setString(2, description);
-                            updatePs.setInt(3, planId);
-                            updatePs.setInt(4, esEntornoVal);
-                            updatePs.executeUpdate();
-                        }
-                    } else {
-                        String insertSql = "INSERT INTO GraficoVivienda (IdPlanFamiliar, RutaImagen, Descripcion, EsEntorno) VALUES (?, ?, ?, ?)";
-                        try (PreparedStatement insertPs = conn.prepareStatement(insertSql)) {
-                            insertPs.setInt(1, planId);
-                            insertPs.setString(2, savedFileName);
-                            insertPs.setString(3, description);
-                            insertPs.setInt(4, esEntornoVal);
-                            insertPs.executeUpdate();
-                        }
-                    }
-                    resp.setStatus(HttpServletResponse.SC_CREATED);
-                    resp.getWriter().write("{\"success\":true,\"message\":\"Archivo subido exitosamente\"}");
-                    return;
-                }
+                return;
             }
 
             // POST /api/actionPlans
             if (servletPath.contains("actionPlans")) {
-                Object planIdObj = body.get("family_plan_id");
-                int planId = 1;
-                if (planIdObj instanceof Number) planId = ((Number) planIdObj).intValue();
-                else if (planIdObj instanceof String) planId = Integer.parseInt((String) planIdObj);
-
-                Object coordIdObj = body.get("coordinator_id");
-                int coordId = 0;
-                if (coordIdObj instanceof Number) coordId = ((Number) coordIdObj).intValue();
-
-                String sql = "INSERT INTO PlanAccion (IdFactorRiesgo, IdCoordinador) VALUES (?, ?)";
-                try (Connection conn = DatabaseConfig.getConnection()) {
-                    // Try to find a risk factor to link to
-                    int riskId = 0;
-                    try (PreparedStatement psR = conn.prepareStatement("SELECT IdFactorRiesgo FROM FactorRiesgo WHERE IdPlanFamiliar = ? LIMIT 1")) {
-                        psR.setInt(1, planId);
-                        try (ResultSet rsR = psR.executeQuery()) { if (rsR.next()) riskId = rsR.getInt(1); }
-                    }
-
-                    if (riskId == 0) {
-                        // Create dummy risk factor if none exists to satisfy foreign keys
-                        try (PreparedStatement psR = conn.prepareStatement("INSERT INTO FactorRiesgo (IdPlanFamiliar, IdTipoAmenaza, Ubicacion) VALUES (?, 1, 'General')", Statement.RETURN_GENERATED_KEYS)) {
-                            psR.setInt(1, planId);
-                            psR.executeUpdate();
-                            try (ResultSet rsR = psR.getGeneratedKeys()) { if (rsR.next()) riskId = rsR.getInt(1); }
-                        }
-                    }
-
-                    if (coordId == 0) {
-                        // Find a member to link as coordinator
-                        try (PreparedStatement psM = conn.prepareStatement("SELECT IdIntegrante FROM Integrante WHERE IdPlanFamiliar = ? LIMIT 1")) {
-                            psM.setInt(1, planId);
-                            try (ResultSet rsM = psM.executeQuery()) { if (rsM.next()) coordId = rsM.getInt(1); }
-                        }
-                    }
-
-                    try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                        ps.setInt(1, riskId);
-                        ps.setInt(2, coordId);
-                        ps.executeUpdate();
-                        resp.setStatus(HttpServletResponse.SC_CREATED);
-                        resp.getWriter().write("{\"success\":true,\"message\":\"Plan de accion creado exitosamente\"}");
-                        return;
-                    }
+                int planId = extractId(body.get("family_plan_id"));
+                int coordId = extractId(body.get("coordinator_id"));
+                if (planComplementarioDAO.createActionPlan(planId, coordId)) {
+                    ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, null, "Plan de accion creado exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al crear plan de accion");
                 }
+                return;
             }
 
             // POST /api/actionPlanActions
             if (servletPath.contains("actionPlanActions")) {
-                Object planAccionObj = body.get("action_plan_id");
-                int planAccionId = 1;
-                if (planAccionObj instanceof Number) planAccionId = ((Number) planAccionObj).intValue();
-
-                Object memberIdObj = body.get("member_id");
-                int memberId = 1;
-                if (memberIdObj instanceof Number) memberId = ((Number) memberIdObj).intValue();
-
+                int planAccionId = extractId(body.get("action_plan_id"));
+                int memberId = extractId(body.get("member_id"));
                 String description = (String) body.get("description");
-
-                Object typeIdObj = body.get("action_type_id");
-                int typeId = 1;
-                if (typeIdObj instanceof Number) typeId = ((Number) typeIdObj).intValue();
+                int typeId = extractId(body.get("action_type_id"));
                 String stage = (typeId == 1) ? "antes" : (typeId == 2 ? "durante" : "despues");
 
-                String sql = "INSERT INTO Accion (IdPlanAccion, IdResponsable, Etapa, Descripcion) VALUES (?, ?, ?, ?)";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setInt(1, planAccionId);
-                    ps.setInt(2, memberId);
-                    ps.setString(3, stage);
-                    ps.setString(4, description);
-                    ps.executeUpdate();
-                    resp.setStatus(HttpServletResponse.SC_CREATED);
-                    resp.getWriter().write("{\"success\":true,\"message\":\"Accion creada exitosamente\"}");
-                    return;
+                if (planComplementarioDAO.insertAction(planAccionId, memberId, stage, description)) {
+                    ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, null, "Accion creada exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error al crear accion");
                 }
+                return;
             }
 
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
@@ -1458,9 +1218,9 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // PATCH /api/petVaccines/{id}
             if (servletPath.contains("petVaccines")) {
-                int vaccineId = Integer.parseInt(pathInfo.substring(1));
-                boolean updated = mascotaDAO.updateVaccine(vaccineId, body);
-                if (updated) {
+                int vaccineId = extractId(pathInfo, null);
+                VaccineDTO dto = gson.fromJson(gson.toJson(body), VaccineDTO.class);
+                if (planComplementarioDAO.updateVaccine(vaccineId, dto)) {
                     ResponseUtil.sendSuccess(resp, "Vacuna actualizada exitosamente");
                 } else {
                     ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Vacuna no encontrada");
@@ -1572,38 +1332,26 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // PATCH /api/actionPlanActions/{id}
             if (servletPath.contains("actionPlanActions")) {
-                int idVal = Integer.parseInt(pathInfo.substring(1));
-                Object memberIdObj = body.get("member_id");
-                int memberId = 1;
-                if (memberIdObj instanceof Number) memberId = ((Number) memberIdObj).intValue();
+                int idVal = extractId(pathInfo, null);
+                int memberId = extractId(body.get("member_id"));
                 String description = (String) body.get("description");
-
-                String sql = "UPDATE Accion SET IdResponsable = ?, Descripcion = ? WHERE IdAccion = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setInt(1, memberId);
-                    ps.setString(2, description);
-                    ps.setInt(3, idVal);
-                    ps.executeUpdate();
+                if (planComplementarioDAO.updateAction(idVal, memberId, description)) {
+                    ResponseUtil.sendSuccess(resp, "Accion de plan actualizada exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Accion de plan no encontrada");
                 }
-                resp.getWriter().write("{\"success\":true,\"message\":\"Accion de plan actualizada exitosamente\"}");
                 return;
             }
 
             // PATCH /api/housingGraphics/{id}/description
             if (servletPath.contains("housingGraphics") && pathInfo != null && pathInfo.endsWith("/description")) {
-                String[] segments = pathInfo.split("/");
-                int graficoId = Integer.parseInt(segments[1]);
+                int graficoId = extractId(pathInfo, null);
                 String description = (String) body.get("description");
-
-                String sql = "UPDATE GraficoVivienda SET Descripcion = ? WHERE IdGrafico = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setString(1, description != null ? description : "");
-                    ps.setInt(2, graficoId);
-                    ps.executeUpdate();
+                if (planComplementarioDAO.updateHousingGraphicDescription(graficoId, description)) {
+                    ResponseUtil.sendSuccess(resp, "Descripción de gráfico actualizada exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Gráfico no encontrado");
                 }
-                resp.getWriter().write("{\"success\":true,\"message\":\"Descripción de gráfico actualizada exitosamente\"}");
                 return;
             }
 
@@ -1665,8 +1413,7 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // DELETE /api/petVaccines/{id}
             if (servletPath.contains("petVaccines")) {
-                boolean deleted = mascotaDAO.deleteVaccine(idVal);
-                if (deleted) {
+                if (planComplementarioDAO.deleteVaccine(idVal)) {
                     ResponseUtil.sendSuccess(resp, "Vacuna eliminada exitosamente");
                 } else {
                     ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Vacuna no encontrada");
@@ -1723,50 +1470,29 @@ public class PlanDetailsServlet extends HttpServlet {
 
             // DELETE /api/actionPlanActions/{id}
             if (servletPath.contains("actionPlanActions")) {
-                String sql = "DELETE FROM Accion WHERE IdAccion = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setInt(1, idVal);
-                    ps.executeUpdate();
+                if (planComplementarioDAO.deleteAction(idVal)) {
+                    ResponseUtil.sendSuccess(resp, "Accion de plan de accion eliminada");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Accion no encontrada");
                 }
-                resp.getWriter().write("{\"success\":true,\"message\":\"Accion de plan de accion eliminada\"}");
                 return;
             }
 
             // DELETE /api/housingGraphics/{id}
             if (servletPath.contains("housingGraphics")) {
-                String fileName = null;
-                // Fetch the filename first to delete the file on disk
-                String selectSql = "SELECT RutaImagen FROM GraficoVivienda WHERE IdGrafico = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(selectSql)) {
-                    ps.setInt(1, idVal);
-                    try (ResultSet rs = ps.executeQuery()) {
-                        if (rs.next()) {
-                            fileName = rs.getString("RutaImagen");
+                HousingInfoDTO dto = planComplementarioDAO.getHousingGraphicById(idVal);
+                if (dto != null && planComplementarioDAO.deleteHousingGraphic(idVal)) {
+                    String fileName = dto.getPath();
+                    if (fileName != null && !fileName.equals("mock_graphic.png")) {
+                        java.io.File file = new java.io.File("/home/dylan/Documents/projects/df/DefensaCivilAPI/storage", fileName);
+                        if (file.exists() && file.isFile()) {
+                            file.delete();
                         }
                     }
-                } catch (Exception e) {
-                    // Ignored
+                    ResponseUtil.sendSuccess(resp, "Gráfico de vivienda eliminado exitosamente");
+                } else {
+                    ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Gráfico no encontrado");
                 }
-
-                // Delete from DB
-                String sql = "DELETE FROM GraficoVivienda WHERE IdGrafico = ?";
-                try (Connection conn = DatabaseConfig.getConnection();
-                     PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setInt(1, idVal);
-                    ps.executeUpdate();
-                }
-
-                // Delete physical file
-                if (fileName != null && !fileName.equals("mock_graphic.png")) {
-                    java.io.File file = new java.io.File("/home/dylan/Documents/projects/df/DefensaCivilAPI/storage", fileName);
-                    if (file.exists() && file.isFile()) {
-                        file.delete();
-                    }
-                }
-
-                resp.getWriter().write("{\"success\":true,\"message\":\"Gráfico de vivienda eliminado exitosamente\"}");
                 return;
             }
 
@@ -1790,5 +1516,81 @@ public class PlanDetailsServlet extends HttpServlet {
             case 7 -> "Completado";
             default -> "Creado";
         };
+    }
+
+    private int extractId(String pathInfo, String prefix) {
+        if (pathInfo == null) return 0;
+        String path = pathInfo;
+        if (prefix != null && path.startsWith(prefix)) {
+            path = path.substring(prefix.length());
+        }
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        int slashIdx = path.indexOf('/');
+        if (slashIdx != -1) {
+            path = path.substring(0, slashIdx);
+        }
+        try {
+            return Integer.parseInt(path);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private int extractHousingTypeId(String pathInfo) {
+        if (pathInfo == null) return 2; // Default is 2 (Entorno)
+        String[] segments = pathInfo.split("/");
+        if (segments.length >= 4 && "type".equalsIgnoreCase(segments[2])) {
+            try {
+                return Integer.parseInt(segments[3]);
+            } catch (NumberFormatException e) {
+                // Fallback
+            }
+        }
+        return 2;
+    }
+
+    private int extractId(Object obj) {
+        if (obj == null) return 0;
+        if (obj instanceof Number) return ((Number) obj).intValue();
+        if (obj instanceof String) {
+            try {
+                return Integer.parseInt((String) obj);
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        }
+        return 0;
+    }
+
+    private String saveUploadedFile(HttpServletRequest req) {
+        String savedFileName = "mock_graphic.png";
+        try {
+            jakarta.servlet.http.Part filePart = req.getPart("path");
+            if (filePart != null) {
+                String fileName = filePart.getSubmittedFileName();
+                if (fileName != null && !fileName.isEmpty()) {
+                    savedFileName = "upload_" + System.currentTimeMillis() + "_" + fileName;
+                    String storageDirPath = "/home/dylan/Documents/projects/df/DefensaCivilAPI/storage";
+                    java.io.File storageDir = new java.io.File(storageDirPath);
+                    if (!storageDir.exists()) {
+                        storageDir.mkdirs();
+                    }
+                    java.io.File fileToSave = new java.io.File(storageDir, savedFileName);
+                    try (java.io.InputStream input = filePart.getInputStream();
+                         java.io.OutputStream output = new java.io.FileOutputStream(fileToSave)) {
+                        byte[] buffer = new byte[4096];
+                        int bytesRead;
+                        while ((bytesRead = input.read(buffer)) != -1) {
+                            output.write(buffer, 0, bytesRead);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Fallback to default
+        }
+        return savedFileName;
     }
 }
