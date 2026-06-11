@@ -3,6 +3,7 @@ package com.defensacivil.controller;
 import com.defensacivil.config.ResponseUtil;
 import com.defensacivil.dao.IntegranteDAO;
 import com.defensacivil.dao.IntegranteDAOImpl;
+import com.defensacivil.dto.MemberDTO;
 import com.google.gson.Gson;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -80,11 +81,10 @@ public class MemberServlet extends HttpServlet {
         String pathInfo = req.getPathInfo();
 
         try {
-            BufferedReader reader = req.getReader();
-            Map<String, Object> body = gson.fromJson(reader, Map.class);
-            if (body == null) body = new HashMap<>();
-
             if (servletPath.contains("conditionMembers")) {
+                BufferedReader reader = req.getReader();
+                Map<String, Object> body = gson.fromJson(reader, Map.class);
+                if (body == null) body = new HashMap<>();
                 int memberId = ((Number) body.get("member_id")).intValue();
                 String name = (String) body.get("name");
                 String dose = (String) body.get("dose");
@@ -97,8 +97,11 @@ public class MemberServlet extends HttpServlet {
             }
 
             if (servletPath.contains("members") && pathInfo != null) {
+                BufferedReader reader = req.getReader();
+                MemberDTO dto = gson.fromJson(reader, MemberDTO.class);
+                if (dto == null) dto = new MemberDTO();
                 int familyPlanId = Integer.parseInt(pathInfo.substring(1));
-                int memberId = integranteDAO.addMember(familyPlanId, body);
+                int memberId = integranteDAO.addMember(familyPlanId, dto);
                 if (memberId > 0) {
                     resp.setStatus(HttpServletResponse.SC_CREATED);
                     resp.getWriter().write(String.format("{\"success\":true,\"message\":\"Integrante agregado exitosamente\",\"data\":{\"id\":%d}}", memberId));
@@ -117,17 +120,21 @@ public class MemberServlet extends HttpServlet {
 
         try {
             int idVal = Integer.parseInt(pathInfo.substring(1));
-            BufferedReader reader = req.getReader();
-            Map<String, Object> body = gson.fromJson(reader, Map.class);
 
             if (servletPath.contains("members")) {
-                if (integranteDAO.updateMember(idVal, body)) {
+                BufferedReader reader = req.getReader();
+                MemberDTO dto = gson.fromJson(reader, MemberDTO.class);
+                if (dto == null) dto = new MemberDTO();
+                if (integranteDAO.updateMember(idVal, dto)) {
                     resp.getWriter().write("{\"success\":true,\"message\":\"Integrante actualizado exitosamente\"}");
                 }
                 return;
             }
 
             if (servletPath.contains("conditionMembers")) {
+                BufferedReader reader = req.getReader();
+                Map<String, Object> body = gson.fromJson(reader, Map.class);
+                if (body == null) body = new HashMap<>();
                 String name = (String) body.get("name");
                 String dose = (String) body.get("dose");
                 if (integranteDAO.updateCondition(idVal, name, dose)) {

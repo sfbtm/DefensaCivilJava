@@ -51,10 +51,21 @@ public class HousingGraphicServlet extends HttpServlet {
             if (requestedFile.isEmpty() && servletPath.length() > 9) {
                 requestedFile = servletPath.substring(9);
             }
-            java.io.File file = new java.io.File("/home/dylan/Documents/projects/df/DefensaCivilAPI/storage", requestedFile);
-            if (!file.exists() || file.isDirectory()) {
-                file = new java.io.File("/home/dylan/Documents/projects/df/UIDefensaCivil_Modificado/public/familia.png");
+            
+            String storagePath = getServletContext().getRealPath("/storage");
+            java.io.File storageDir = new java.io.File(storagePath);
+            if (!storageDir.exists()) {
+                storageDir.mkdirs();
             }
+            
+            java.io.File file = new java.io.File(storageDir, requestedFile);
+            if (!file.exists() || file.isDirectory()) {
+                String fallbackPath = getServletContext().getRealPath("/public/familia.png");
+                if (fallbackPath != null) {
+                    file = new java.io.File(fallbackPath);
+                }
+            }
+            
             if (file.exists()) {
                 String mimeType = getServletContext().getMimeType(file.getName());
                 if (mimeType == null) {
@@ -191,7 +202,9 @@ public class HousingGraphicServlet extends HttpServlet {
                 if (dto != null && planComplementarioDAO.deleteHousingGraphic(idVal)) {
                     String fileName = dto.getPath();
                     if (fileName != null && !fileName.equals("mock_graphic.png")) {
-                        java.io.File file = new java.io.File("/home/dylan/Documents/projects/df/DefensaCivilAPI/storage", fileName);
+                        String storagePath = getServletContext().getRealPath("/storage");
+                        java.io.File storageDir = new java.io.File(storagePath);
+                        java.io.File file = new java.io.File(storageDir, fileName);
                         if (file.exists() && file.isFile()) {
                             file.delete();
                         }
@@ -291,8 +304,8 @@ public class HousingGraphicServlet extends HttpServlet {
                 String fileName = filePart.getSubmittedFileName();
                 if (fileName != null && !fileName.isEmpty()) {
                     savedFileName = "upload_" + System.currentTimeMillis() + "_" + fileName;
-                    String storageDirPath = "/home/dylan/Documents/projects/df/DefensaCivilAPI/storage";
-                    java.io.File storageDir = new java.io.File(storageDirPath);
+                    String storagePath = getServletContext().getRealPath("/storage");
+                    java.io.File storageDir = new java.io.File(storagePath);
                     if (!storageDir.exists()) {
                         storageDir.mkdirs();
                     }

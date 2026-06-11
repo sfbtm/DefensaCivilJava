@@ -1,6 +1,7 @@
 package com.defensacivil.dao;
 
 import com.defensacivil.config.DatabaseConfig;
+import com.defensacivil.dto.PetDTO;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -71,14 +72,40 @@ public class MascotaDAOImpl implements MascotaDAO {
     }
 
     @Override
-    public Map<String, Object> getPetById(int petId) throws SQLException {
-        String sql = "SELECT m.IdMascota, m.Nombre, m.IdGenero, g.Nombre AS GeneroNombre, m.Raza, m.Especie, m.Edad, m.IdPlanFamiliar FROM Mascotas m LEFT JOIN Genero g ON m.IdGenero = g.IdGenero WHERE m.IdMascota = ?";
+    public PetDTO getPetById(int petId) throws SQLException {
+        String sql = "SELECT m.IdMascota, m.Nombre, m.IdGenero, m.Raza, m.Especie, m.Edad, m.IdPlanFamiliar FROM Mascotas m WHERE m.IdMascota = ?";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, petId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return mapResultSetToPet(rs);
+                    PetDTO dto = new PetDTO();
+                    dto.setId(rs.getInt("IdMascota"));
+                    dto.setName(rs.getString("Nombre"));
+                    dto.setBreed(rs.getString("Raza"));
+                    
+                    Date edadDate = rs.getDate("Edad");
+                    dto.setBirthDate(edadDate != null ? edadDate.toString() : "");
+
+                    String especieStr = rs.getString("Especie");
+                    int speciesId = 1;
+                    if (especieStr != null) {
+                        if (especieStr.equalsIgnoreCase("Perro")) speciesId = 1;
+                        else if (especieStr.equalsIgnoreCase("Gato")) speciesId = 2;
+                        else if (especieStr.equalsIgnoreCase("Ave")) speciesId = 3;
+                    }
+                    dto.setSpeciesId(speciesId);
+                    dto.setAnimalGenderId(rs.getInt("IdGenero"));
+                    dto.setFamilyPlanId(rs.getInt("IdPlanFamiliar"));
+
+                    int age = 0;
+                    if (edadDate != null) {
+                        java.time.LocalDate birthDate = edadDate.toLocalDate();
+                        java.time.LocalDate now = java.time.LocalDate.now();
+                        age = java.time.Period.between(birthDate, now).getYears();
+                    }
+                    dto.setAge(age);
+                    return dto;
                 }
             }
         }
@@ -100,31 +127,19 @@ public class MascotaDAOImpl implements MascotaDAO {
     }
 
     @Override
-    public int insertPet(Map<String, Object> body) throws SQLException {
-        String name = (String) body.get("name");
-        String breed = (String) body.get("breed");
-        String birthDateStr = (String) body.get("birth_date");
-
-        Object genderIdObj = body.get("animal_gender_id");
-        int genderId = 1;
-        if (genderIdObj instanceof Number) genderId = ((Number) genderIdObj).intValue();
-        else if (genderIdObj instanceof String) genderId = Integer.parseInt((String) genderIdObj);
-
-        Object speciesIdObj = body.get("species_id");
-        int speciesId = 1;
-        if (speciesIdObj instanceof Number) speciesId = ((Number) speciesIdObj).intValue();
-        else if (speciesIdObj instanceof String) speciesId = Integer.parseInt((String) speciesIdObj);
+    public int insertPet(PetDTO dto) throws SQLException {
+        String name = dto.getName();
+        String breed = dto.getBreed();
+        String birthDateStr = dto.getBirthDate();
+        int genderId = dto.getAnimalGenderId() == 0 ? 1 : dto.getAnimalGenderId();
+        int speciesId = dto.getSpeciesId() == 0 ? 1 : dto.getSpeciesId();
         String species = switch (speciesId) {
             case 1 -> "Perro";
             case 2 -> "Gato";
             case 3 -> "Ave";
             default -> "Perro";
         };
-
-        Object planIdObj = body.get("family_plan_id");
-        int planId = 1;
-        if (planIdObj instanceof Number) planId = ((Number) planIdObj).intValue();
-        else if (planIdObj instanceof String) planId = Integer.parseInt((String) planIdObj);
+        int planId = dto.getFamilyPlanId() == 0 ? 1 : dto.getFamilyPlanId();
 
         String sql = "INSERT INTO Mascotas (Nombre, IdGenero, Raza, Especie, Edad, IdPlanFamiliar) VALUES (?, ?, ?, ?, ?, ?)";
         try (Connection conn = DatabaseConfig.getConnection();
@@ -147,20 +162,12 @@ public class MascotaDAOImpl implements MascotaDAO {
     }
 
     @Override
-    public boolean updatePet(int petId, Map<String, Object> body) throws SQLException {
-        String name = (String) body.get("name");
-        String breed = (String) body.get("breed");
-        String birthDateStr = (String) body.get("birth_date");
-
-        Object genderIdObj = body.get("animal_gender_id");
-        int genderId = 1;
-        if (genderIdObj instanceof Number) genderId = ((Number) genderIdObj).intValue();
-        else if (genderIdObj instanceof String) genderId = Integer.parseInt((String) genderIdObj);
-
-        Object speciesIdObj = body.get("species_id");
-        int speciesId = 1;
-        if (speciesIdObj instanceof Number) speciesId = ((Number) speciesIdObj).intValue();
-        else if (speciesIdObj instanceof String) speciesId = Integer.parseInt((String) speciesIdObj);
+    public boolean updatePet(int petId, PetDTO dto) throws SQLException {
+        String name = dto.getName();
+        String breed = dto.getBreed();
+        String birthDateStr = dto.getBirthDate();
+        int genderId = dto.getAnimalGenderId() == 0 ? 1 : dto.getAnimalGenderId();
+        int speciesId = dto.getSpeciesId() == 0 ? 1 : dto.getSpeciesId();
         String species = switch (speciesId) {
             case 1 -> "Perro";
             case 2 -> "Gato";

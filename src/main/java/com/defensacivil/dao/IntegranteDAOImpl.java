@@ -1,6 +1,7 @@
 package com.defensacivil.dao;
 
 import com.defensacivil.config.DatabaseConfig;
+import com.defensacivil.dto.MemberDTO;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -77,34 +78,26 @@ public class IntegranteDAOImpl implements IntegranteDAO {
     }
 
     @Override
-    public Map<String, Object> getMemberById(int memberId) throws SQLException {
+    public MemberDTO getMemberById(int memberId) throws SQLException {
         String sql = """
-            SELECT i.IdIntegrante, i.Nombre, i.Apellido, i.Parentesco, i.Telefono, i.IdGenero, i.IdDocumentoTipo, i.IdNacionalidad,
-                   g.Nombre AS GeneroNombre, dt.Nombre AS DocumentoNombre, n.Nombre AS NacionalidadNombre
+            SELECT i.IdIntegrante, i.Nombre, i.Apellido, i.Parentesco, i.Telefono, i.IdGenero, i.IdDocumentoTipo, i.IdNacionalidad
             FROM Integrante i
-            LEFT JOIN Genero g ON i.IdGenero = g.IdGenero
-            LEFT JOIN DocumentoTipo dt ON i.IdDocumentoTipo = dt.IdDocumentoTipo
-            LEFT JOIN Nacionalidad n ON i.IdNacionalidad = n.IdNacionalidad
             WHERE i.IdIntegrante = ?
             """;
-        Map<String, Object> member = new HashMap<>();
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, memberId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    member.put("id", rs.getInt("IdIntegrante"));
-                    member.put("names", rs.getString("Nombre"));
-                    member.put("last_names", rs.getString("Apellido"));
-                    member.put("relationship", rs.getString("Parentesco"));
-                    member.put("phone", rs.getString("Telefono"));
-                    member.put("gender_id", rs.getInt("IdGenero"));
-                    member.put("document_type_id", rs.getInt("IdDocumentoTipo"));
-                    member.put("nationality_id", rs.getInt("IdNacionalidad"));
-                    member.put("gender", Map.of("name", rs.getString("GeneroNombre") != null ? rs.getString("GeneroNombre") : ""));
-                    member.put("document_type", Map.of("acronym", rs.getString("DocumentoNombre") != null ? rs.getString("DocumentoNombre") : ""));
-                    member.put("nationality", Map.of("name", rs.getString("NacionalidadNombre") != null ? rs.getString("NacionalidadNombre") : ""));
-                    member.put("kinship", Map.of("name", rs.getString("Parentesco") != null ? rs.getString("Parentesco") : ""));
+                    MemberDTO dto = new MemberDTO();
+                    dto.setId(rs.getInt("IdIntegrante"));
+                    dto.setNames(rs.getString("Nombre"));
+                    dto.setLastNames(rs.getString("Apellido"));
+                    dto.setRelationship(rs.getString("Parentesco"));
+                    dto.setPhone(rs.getString("Telefono"));
+                    dto.setGenderId(rs.getInt("IdGenero"));
+                    dto.setDocumentTypeId(rs.getInt("IdDocumentoTipo"));
+                    dto.setNationalityId(rs.getInt("IdNacionalidad"));
                     
                     Map<String, Object> extra = extraData.getOrDefault("member_" + memberId, Map.of());
                     int bloodGroupId = 1;
@@ -112,16 +105,15 @@ public class IntegranteDAOImpl implements IntegranteDAO {
                     if (bgIdObj instanceof Number) bloodGroupId = ((Number) bgIdObj).intValue();
                     else if (bgIdObj instanceof String) bloodGroupId = Integer.parseInt((String) bgIdObj);
 
-                    member.put("blood_group_id", bloodGroupId);
-                    member.put("blood_group", Map.of("name", extra.getOrDefault("blood_group", "O+")));
-                    member.put("eps", extra.getOrDefault("eps", "Compensar"));
-                    member.put("birth_date", extra.getOrDefault("birth_date", "1990-01-01"));
-                    member.put("document_number", extra.getOrDefault("document_number", "1000000" + memberId));
-                    member.put("kinship_id", 1);
+                    dto.setBloodGroupId(bloodGroupId);
+                    dto.setEps((String) extra.getOrDefault("eps", "Compensar"));
+                    dto.setBirthDate((String) extra.getOrDefault("birth_date", "1990-01-01"));
+                    dto.setDocumentNumber((String) extra.getOrDefault("document_number", "1000000" + memberId));
+                    return dto;
                 }
             }
         }
-        return member;
+        return null;
     }
 
     @Override
@@ -142,23 +134,14 @@ public class IntegranteDAOImpl implements IntegranteDAO {
     }
 
     @Override
-    public int addMember(int familyPlanId, Map<String, Object> body) throws SQLException {
-        String names = (String) body.get("names");
-        String lastNames = (String) body.get("last_names");
-        String relationship = (String) body.get("relationship");
-        String phone = (String) body.get("phone");
-
-        Object genderObj = body.get("gender_id");
-        int genderId = 1;
-        if (genderObj instanceof Number) genderId = ((Number) genderObj).intValue();
-
-        Object docTypeObj = body.get("document_type_id");
-        int docTypeId = 1;
-        if (docTypeObj instanceof Number) docTypeId = ((Number) docTypeObj).intValue();
-
-        Object natObj = body.get("nationality_id");
-        int natId = 1;
-        if (natObj instanceof Number) natId = ((Number) natObj).intValue();
+    public int addMember(int familyPlanId, MemberDTO dto) throws SQLException {
+        String names = dto.getNames();
+        String lastNames = dto.getLastNames();
+        String relationship = dto.getRelationship();
+        String phone = dto.getPhone();
+        int genderId = dto.getGenderId() == 0 ? 1 : dto.getGenderId();
+        int docTypeId = dto.getDocumentTypeId() == 0 ? 1 : dto.getDocumentTypeId();
+        int natId = dto.getNationalityId() == 0 ? 1 : dto.getNationalityId();
 
         String sql = "INSERT INTO Integrante (IdPlanFamiliar, Nombre, Apellido, Parentesco, Telefono, IdGenero, IdDocumentoTipo, IdNacionalidad) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = DatabaseConfig.getConnection();
@@ -178,15 +161,11 @@ public class IntegranteDAOImpl implements IntegranteDAO {
 
                     // Save extra unmapped fields to memory
                     Map<String, Object> extra = new HashMap<>();
-                    extra.put("eps", body.get("eps"));
-                    extra.put("birth_date", body.get("birth_date"));
-                    extra.put("document_number", body.get("document_number"));
+                    extra.put("eps", dto.getEps());
+                    extra.put("birth_date", dto.getBirthDate());
+                    extra.put("document_number", dto.getDocumentNumber());
 
-                    Object bgIdObj = body.get("blood_group_id");
-                    int bgId = 1;
-                    if (bgIdObj instanceof Number) bgId = ((Number) bgIdObj).intValue();
-                    else if (bgIdObj instanceof String) bgId = Integer.parseInt((String) bgIdObj);
-
+                    int bgId = dto.getBloodGroupId() == 0 ? 1 : dto.getBloodGroupId();
                     String bgName = "O+";
                     if (bgId == 1) bgName = "O+";
                     else if (bgId == 2) bgName = "O-";
@@ -208,23 +187,14 @@ public class IntegranteDAOImpl implements IntegranteDAO {
     }
 
     @Override
-    public boolean updateMember(int memberId, Map<String, Object> body) throws SQLException {
-        String names = (String) body.get("names");
-        String lastNames = (String) body.get("last_names");
-        String relationship = (String) body.get("relationship");
-        String phone = (String) body.get("phone");
-
-        Object genderObj = body.get("gender_id");
-        int genderId = 1;
-        if (genderObj instanceof Number) genderId = ((Number) genderObj).intValue();
-
-        Object docTypeObj = body.get("document_type_id");
-        int docTypeId = 1;
-        if (docTypeObj instanceof Number) docTypeId = ((Number) docTypeObj).intValue();
-
-        Object natObj = body.get("nationality_id");
-        int natId = 1;
-        if (natObj instanceof Number) natId = ((Number) natObj).intValue();
+    public boolean updateMember(int memberId, MemberDTO dto) throws SQLException {
+        String names = dto.getNames();
+        String lastNames = dto.getLastNames();
+        String relationship = dto.getRelationship();
+        String phone = dto.getPhone();
+        int genderId = dto.getGenderId() == 0 ? 1 : dto.getGenderId();
+        int docTypeId = dto.getDocumentTypeId() == 0 ? 1 : dto.getDocumentTypeId();
+        int natId = dto.getNationalityId() == 0 ? 1 : dto.getNationalityId();
 
         String sql = "UPDATE Integrante SET Nombre = ?, Apellido = ?, Parentesco = ?, Telefono = ?, IdGenero = ?, IdDocumentoTipo = ?, IdNacionalidad = ? WHERE IdIntegrante = ?";
         try (Connection conn = DatabaseConfig.getConnection();
@@ -241,15 +211,11 @@ public class IntegranteDAOImpl implements IntegranteDAO {
             if (rows > 0) {
                 // Save extra unmapped fields to memory
                 Map<String, Object> extra = extraData.computeIfAbsent("member_" + memberId, k -> new HashMap<>());
-                extra.put("eps", body.get("eps"));
-                extra.put("birth_date", body.get("birth_date"));
-                extra.put("document_number", body.get("document_number"));
+                extra.put("eps", dto.getEps());
+                extra.put("birth_date", dto.getBirthDate());
+                extra.put("document_number", dto.getDocumentNumber());
 
-                Object bgIdObj = body.get("blood_group_id");
-                int bgId = 1;
-                if (bgIdObj instanceof Number) bgId = ((Number) bgIdObj).intValue();
-                else if (bgIdObj instanceof String) bgId = Integer.parseInt((String) bgIdObj);
-
+                int bgId = dto.getBloodGroupId() == 0 ? 1 : dto.getBloodGroupId();
                 String bgName = "O+";
                 if (bgId == 1) bgName = "O+";
                 else if (bgId == 2) bgName = "O-";

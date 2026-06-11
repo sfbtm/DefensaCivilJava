@@ -6,6 +6,7 @@ import com.defensacivil.dto.ActionDTO;
 import com.defensacivil.dto.VaccineDTO;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 
 public interface PlanComplementarioDAO {
     // Housing Info & Graphics
@@ -32,4 +33,11 @@ public interface PlanComplementarioDAO {
     int insertVaccine(VaccineDTO dto) throws SQLException;
     boolean updateVaccine(int vaccineId, VaccineDTO dto) throws SQLException;
     boolean deleteVaccine(int vaccineId) throws SQLException;
+
+    // Available Resources
+    List<Map<String, Object>> getAvailableResourcesByPlan(int planId) throws SQLException;
+    Map<String, Object> getAvailableResourceById(int idVal) throws SQLException;
+    boolean insertAvailableResource(int planId, int resourceId, String description, String location, float distance, String phone) throws SQLException;
+    boolean updateAvailableResource(int idVal, int resourceId, String description, String location, float distance, String phone) throws SQLException;
+    boolean deleteAvailableResource(int idVal) throws SQLException;
 }

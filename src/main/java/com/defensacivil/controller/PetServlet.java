@@ -6,6 +6,7 @@ import com.defensacivil.dao.MascotaDAOImpl;
 import com.defensacivil.dao.PlanComplementarioDAO;
 import com.defensacivil.dao.PlanComplementarioDAOImpl;
 import com.defensacivil.dto.VaccineDTO;
+import com.defensacivil.dto.PetDTO;
 import com.google.gson.Gson;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -75,12 +76,11 @@ public class PetServlet extends HttpServlet {
         String servletPath = req.getServletPath();
 
         try {
-            BufferedReader reader = req.getReader();
-            Map<String, Object> body = gson.fromJson(reader, Map.class);
-            if (body == null) body = new HashMap<>();
-
             if (servletPath.contains("pets")) {
-                int generatedId = mascotaDAO.insertPet(body);
+                BufferedReader reader = req.getReader();
+                PetDTO dto = gson.fromJson(reader, PetDTO.class);
+                if (dto == null) dto = new PetDTO();
+                int generatedId = mascotaDAO.insertPet(dto);
                 if (generatedId > 0) {
                     ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, Map.of("id", generatedId), "Mascota agregada exitosamente");
                 } else {
@@ -90,7 +90,9 @@ public class PetServlet extends HttpServlet {
             }
 
             if (servletPath.contains("petVaccines")) {
-                VaccineDTO dto = gson.fromJson(gson.toJson(body), VaccineDTO.class);
+                BufferedReader reader = req.getReader();
+                VaccineDTO dto = gson.fromJson(reader, VaccineDTO.class);
+                if (dto == null) dto = new VaccineDTO();
                 int generatedId = planComplementarioDAO.insertVaccine(dto);
                 if (generatedId > 0) {
                     ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, null, "Vacuna agregada exitosamente");
@@ -150,14 +152,13 @@ public class PetServlet extends HttpServlet {
         String pathInfo = req.getPathInfo();
 
         try {
-            BufferedReader reader = req.getReader();
-            Map<String, Object> body = gson.fromJson(reader, Map.class);
-            if (body == null) body = new HashMap<>();
-
             int idVal = extractId(pathInfo, null);
 
             if (servletPath.contains("pets")) {
-                if (mascotaDAO.updatePet(idVal, body)) {
+                BufferedReader reader = req.getReader();
+                PetDTO dto = gson.fromJson(reader, PetDTO.class);
+                if (dto == null) dto = new PetDTO();
+                if (mascotaDAO.updatePet(idVal, dto)) {
                     ResponseUtil.sendSuccess(resp, "Mascota actualizada exitosamente");
                 } else {
                     ResponseUtil.sendError(resp, HttpServletResponse.SC_NOT_FOUND, "Mascota no encontrada");
@@ -166,7 +167,9 @@ public class PetServlet extends HttpServlet {
             }
 
             if (servletPath.contains("petVaccines")) {
-                VaccineDTO dto = gson.fromJson(gson.toJson(body), VaccineDTO.class);
+                BufferedReader reader = req.getReader();
+                VaccineDTO dto = gson.fromJson(reader, VaccineDTO.class);
+                if (dto == null) dto = new VaccineDTO();
                 if (planComplementarioDAO.updateVaccine(idVal, dto)) {
                     ResponseUtil.sendSuccess(resp, "Vacuna actualizada exitosamente");
                 } else {

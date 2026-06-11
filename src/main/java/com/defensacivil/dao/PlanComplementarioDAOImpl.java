@@ -427,4 +427,163 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
             return deleted;
         }
     }
+
+    // --- AVAILABLE RESOURCES ---
+
+    @Override
+    public List<Map<String, Object>> getAvailableResourcesByPlan(int planId) throws SQLException {
+        List<Map<String, Object>> list = new ArrayList<>();
+        String sql = """
+            SELECT rd.IdRecurso, rd.Ubicacion, rd.Distancia, rd.Telefono, rt.Nombre AS RecursoNombre, s.Nombre AS ServicioNombre
+            FROM RecursoDisponible rd
+            JOIN RecursoTipo rt ON rd.IdRecursoTipo = rt.IdRecursoTipo
+            JOIN Servicio s ON rd.IdServicio = s.IdServicio
+            WHERE rd.IdPlanFamiliar = ?
+            """;
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, planId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> item = new HashMap<>();
+                    int resourceId = rs.getInt("IdRecurso");
+                    item.put("id", resourceId);
+                    item.put("resource_name", rs.getString("RecursoNombre"));
+                    item.put("location", rs.getString("Ubicacion") != null ? rs.getString("Ubicacion") : "");
+                    item.put("distance", rs.getFloat("Distancia"));
+                    item.put("service", rs.getString("ServicioNombre") != null ? rs.getString("ServicioNombre") : "");
+                    
+                    // Load description from extraData
+                    Map<String, Object> extra = extraData.getOrDefault("resource_" + resourceId, Map.of());
+                    item.put("description", extra.getOrDefault("description", ""));
+                    item.put("phone", rs.getString("Telefono") != null ? rs.getString("Telefono") : "");
+                    list.add(item);
+                }
+            }
+        }
+        return list;
+    }
+
+    @Override
+    public Map<String, Object> getAvailableResourceById(int idVal) throws SQLException {
+        Map<String, Object> item = new HashMap<>();
+        String sql = """
+            SELECT rd.IdRecurso, rd.IdRecursoTipo, rd.IdServicio, rd.Ubicacion, rd.Distancia, rd.Telefono, rt.Nombre AS RecursoNombre
+            FROM RecursoDisponible rd
+            JOIN RecursoTipo rt ON rd.IdRecursoTipo = rt.IdRecursoTipo
+            WHERE rd.IdRecurso = ?
+            """;
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, idVal);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    item.put("id", rs.getInt("IdRecurso"));
+                    item.put("phone", rs.getString("Telefono") != null ? rs.getString("Telefono") : "");
+                    item.put("distance", rs.getFloat("Distancia"));
+                    item.put("location", rs.getString("Ubicacion") != null ? rs.getString("Ubicacion") : "");
+                    item.put("resource_id", rs.getInt("IdRecursoTipo"));
+                    item.put("resource_name", rs.getString("RecursoNombre"));
+                    
+                    Map<String, Object> extra = extraData.getOrDefault("resource_" + idVal, Map.of());
+                    item.put("description", extra.getOrDefault("description", ""));
+                }
+            }
+        }
+        return item;
+    }
+
+    @Override
+    public boolean insertAvailableResource(int planId, int resourceId, String description, String location, float distance, String phone) throws SQLException {
+        int serviceId = 1;
+        String serviceSql = "SELECT s.IdServicio FROM Servicio s WHERE s.Nombre = (SELECT r.Servicio FROM Recurso r WHERE r.IdRecurso = ?)";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement psService = conn.prepareStatement(serviceSql)) {
+            psService.setInt(1, resourceId);
+            try (ResultSet rs = psService.executeQuery()) {
+                if (rs.next()) {
+                    serviceId = rs.getInt("IdServicio");
+                }
+            }
+        } catch (Exception e) {
+            // Fallback to default service ID 1
+        }
+
+        String sql = "INSERT INTO RecursoDisponible (IdPlanFamiliar, IdRecursoTipo, IdServicio, Ubicacion, Distancia, Telefono) VALUES (?, ?, ?, ?, ?, ?)";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setInt(1, planId);
+            ps.setInt(2, resourceId); // Using resourceId directly as IdRecursoTipo
+            ps.setInt(3, serviceId);
+            ps.setString(4, location != null ? location : "");
+            ps.setFloat(5, distance);
+            ps.setString(6, phone != null ? phone : "");
+            int affectedRows = ps.executeUpdate();
+            if (affectedRows == 0) {
+                return false;
+            }
+
+            int generatedId = 0;
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    generatedId = rs.getInt(1);
+                }
+            }
+            if (generatedId > 0) {
+                Map<String, Object> extra = new HashMap<>();
+                extra.put("description", description != null ? description : "");
+                extraData.put("resource_" + generatedId, extra);
+            }
+            return true;
+        }
+    }
+
+    @Override
+    public boolean updateAvailableResource(int idVal, int resourceId, String description, String location, float distance, String phone) throws SQLException {
+        int serviceId = 1;
+        String serviceSql = "SELECT s.IdServicio FROM Servicio s WHERE s.Nombre = (SELECT r.Servicio FROM Recurso r WHERE r.IdRecurso = ?)";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement psService = conn.prepareStatement(serviceSql)) {
+            psService.setInt(1, resourceId);
+            try (ResultSet rs = psService.executeQuery()) {
+                if (rs.next()) {
+                    serviceId = rs.getInt("IdServicio");
+                }
+            }
+        } catch (Exception e) {
+            // Fallback to default service ID 1
+        }
+
+        String sql = "UPDATE RecursoDisponible SET IdRecursoTipo = ?, IdServicio = ?, Ubicacion = ?, Distancia = ?, Telefono = ? WHERE IdRecurso = ?";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, resourceId);
+            ps.setInt(2, serviceId);
+            ps.setString(3, location != null ? location : "");
+            ps.setFloat(4, distance);
+            ps.setString(5, phone != null ? phone : "");
+            ps.setInt(6, idVal);
+            boolean updated = ps.executeUpdate() > 0;
+            if (updated) {
+                // Update extraData cache
+                Map<String, Object> extra = extraData.computeIfAbsent("resource_" + idVal, k -> new HashMap<>());
+                extra.put("description", description != null ? description : "");
+            }
+            return updated;
+        }
+    }
+
+    @Override
+    public boolean deleteAvailableResource(int idVal) throws SQLException {
+        String sql = "DELETE FROM RecursoDisponible WHERE IdRecurso = ?";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, idVal);
+            boolean deleted = ps.executeUpdate() > 0;
+            if (deleted) {
+                extraData.remove("resource_" + idVal);
+            }
+            return deleted;
+        }
+    }
 }
