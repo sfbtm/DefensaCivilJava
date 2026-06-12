@@ -19,7 +19,7 @@ import java.util.Map;
 @WebServlet(urlPatterns = {
     "/api/statusPlans",
     "/api/zones",
-    "/api/cities",
+    "/api/cities/*",
     "/api/kinships/*",
     "/api/bloodGroups/*",
     "/api/animalGenders/*"
@@ -60,12 +60,26 @@ public class CatalogServlet extends HttpServlet {
             }
 
             if (servletPath.contains("cities")) {
-                List<Map<String, Object>> list = List.of(
-                    Map.of("id", 1, "name", "Medellín"),
-                    Map.of("id", 2, "name", "Bello"),
-                    Map.of("id", 3, "name", "Itagüí")
-                );
-                resp.getWriter().write(gson.toJson(Map.of("data", list)));
+                if (pathInfo != null && pathInfo.startsWith("/department/")) {
+                    int deptId = 1;
+                    try {
+                        deptId = Integer.parseInt(pathInfo.substring(12));
+                    } catch (NumberFormatException ignored) {}
+                    
+                    List<Map<String, Object>> list = List.of(
+                        Map.of("id", 1, "name", "Medellín"),
+                        Map.of("id", 2, "name", "Bello"),
+                        Map.of("id", 3, "name", "Itagüí")
+                    );
+                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
+                } else {
+                    List<Map<String, Object>> list = List.of(
+                        Map.of("id", 1, "name", "Medellín"),
+                        Map.of("id", 2, "name", "Bello"),
+                        Map.of("id", 3, "name", "Itagüí")
+                    );
+                    resp.getWriter().write(gson.toJson(Map.of("data", list)));
+                }
                 return;
             }
 
