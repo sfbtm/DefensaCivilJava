@@ -176,16 +176,19 @@ public class PlanDetailsServlet extends HttpServlet {
                 }
             }
 
+            // Si el POST Se realiza hacian familyPlans:
             // POST /api/familyPlans
             if (servletPath.contains("familyPlans")) {
                 String lastNames = (String) body.get("last_names");
 
                 jakarta.servlet.http.HttpSession session = req.getSession();
+//                Wrapper class por si el usuario no ha signeado
                 Integer loggedInUserId = (Integer) session.getAttribute("userId");
                 int userId;
                 if (loggedInUserId != null) {
                     userId = loggedInUserId;
                 } else {
+//                    Uso de Object ya que se hace uso de JSON mixto
                     Object userIdObj = body.get("user_id");
                     if (userIdObj instanceof Number) {
                         userId = ((Number) userIdObj).intValue();
@@ -197,6 +200,7 @@ public class PlanDetailsServlet extends HttpServlet {
                     }
                 }
 
+//                Mandar el planId al DAO para que sea creado en la DB
                 int planId = planFamiliarDAO.createFamilyPlan(lastNames, userId, body);
                 if (planId > 0) {
                     ResponseUtil.sendSuccess(resp, HttpServletResponse.SC_CREATED, Map.of("id", planId), "Plan familiar creado con exito");
@@ -206,10 +210,12 @@ public class PlanDetailsServlet extends HttpServlet {
                 return;
             }
 
+            // Si el POST Se realiza hacian availableResources (Recursos disponibles):
             // POST /api/availableResources
             if (servletPath.contains("availableResources")) {
                 Object resourceIdObj = body.get("resource_id");
                 int resourceId = 1;
+//                Validar si es num o str, si es str convertir a num
                 if (resourceIdObj instanceof Number) resourceId = ((Number) resourceIdObj).intValue();
                 else if (resourceIdObj instanceof String) resourceId = Integer.parseInt((String) resourceIdObj);
 
@@ -218,6 +224,7 @@ public class PlanDetailsServlet extends HttpServlet {
                 
                 Object distanceObj = body.get("distance");
                 float distance = 0.0f;
+//                Lo mismo que con resourceId, pero con float
                 if (distanceObj instanceof Number) distance = ((Number) distanceObj).floatValue();
                 else if (distanceObj instanceof String && !((String) distanceObj).isEmpty()) distance = Float.parseFloat((String) distanceObj);
 
