@@ -239,7 +239,7 @@ public class IntegranteDAOImpl implements IntegranteDAO {
             conn.setAutoCommit(false);
             try {
                 // Delete related diseases first to respect foreign key constraints
-                try (PreparedStatement psD = conn.prepareStatement("DELETE FROM Enfermedad WHERE IdIntegrante = ?")) {
+                try (PreparedStatement psD = conn.prepareStatement("DELETE FROM IntegranteEnfermedad WHERE IdIntegrante = ?")) {
                     psD.setInt(1, memberId);
                     psD.executeUpdate();
                 }
@@ -263,15 +263,19 @@ public class IntegranteDAOImpl implements IntegranteDAO {
     @Override
     public List<Map<String, Object>> getConditionsByMember(int memberId) throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
-        String sql = "SELECT IdEnfermedad, Nombre, Medicina, Dosis FROM Enfermedad WHERE IdIntegrante = ?";
+        String sql = "SELECT ie.IdEnfermedad, e.Nombre, ie.Medicina, ie.Dosis " +
+                     "FROM IntegranteEnfermedad ie " +
+                     "JOIN Enfermedad e ON ie.IdEnfermedad = e.IdEnfermedad " +
+                     "WHERE ie.IdIntegrante = ?";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, memberId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     Map<String, Object> cond = new HashMap<>();
-                    int condId = rs.getInt("IdEnfermedad");
-                    cond.put("id", condId);
+                    int diseaseId = rs.getInt("IdEnfermedad");
+                    int relationId = memberId * 100000 + diseaseId;
+                    cond.put("id", relationId);
                     cond.put("name", rs.getString("Nombre"));
                     cond.put("dose", rs.getString("Dosis"));
                     cond.put("medicine", rs.getString("Medicina"));
@@ -288,14 +292,20 @@ public class IntegranteDAOImpl implements IntegranteDAO {
 
     @Override
     public Map<String, Object> getConditionById(int conditionId) throws SQLException {
-        String sql = "SELECT IdEnfermedad, IdIntegrante, Nombre, Medicina, Dosis FROM Enfermedad WHERE IdEnfermedad = ?";
+        int memberId = conditionId / 100000;
+        int diseaseId = conditionId % 100000;
+        String sql = "SELECT ie.IdIntegrante, ie.IdEnfermedad, e.Nombre, ie.Medicina, ie.Dosis " +
+                     "FROM IntegranteEnfermedad ie " +
+                     "JOIN Enfermedad e ON ie.IdEnfermedad = e.IdEnfermedad " +
+                     "WHERE ie.IdIntegrante = ? AND ie.IdEnfermedad = ?";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, conditionId);
+            ps.setInt(1, memberId);
+            ps.setInt(2, diseaseId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     Map<String, Object> cond = new HashMap<>();
-                    cond.put("id", rs.getInt("IdEnfermedad"));
+                    cond.put("id", conditionId);
                     cond.put("name", rs.getString("Nombre"));
                     cond.put("dose", rs.getString("Dosis"));
                     cond.put("medicine", rs.getString("Medicina"));
@@ -311,36 +321,120 @@ public class IntegranteDAOImpl implements IntegranteDAO {
 
     @Override
     public boolean addCondition(int memberId, String name, String dose) throws SQLException {
-        String sql = "INSERT INTO Enfermedad (IdIntegrante, Nombre, Medicina, Dosis) VALUES (?, ?, ?, ?)";
-        try (Connection conn = DatabaseConfig.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, memberId);
-            ps.setString(2, name);
-            ps.setString(3, name);
-            ps.setString(4, dose != null ? dose : "");
-            return ps.executeUpdate() > 0;
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                int diseaseId = 0;
+                // 1. Find or create in Enfermedad catalog
+                String findSql = "SELECT IdEnfermedad FROM Enfermedad WHERE Nombre = ?";
+                try (PreparedStatement findPs = conn.prepareStatement(findSql)) {
+                    findPs.setString(1, name);
+                    try (ResultSet rs = findPs.executeQuery()) {
+                        if (rs.next()) {
+                            diseaseId = rs.getInt("IdEnfermedad");
+                        }
+                    }
+                }
+                if (diseaseId == 0) {
+                    String insertCatalogSql = "INSERT INTO Enfermedad (Nombre) VALUES (?)";
+                    try (PreparedStatement insertCatalogPs = conn.prepareStatement(insertCatalogSql, Statement.RETURN_GENERATED_KEYS)) {
+                        insertCatalogPs.setString(1, name);
+                        insertCatalogPs.executeUpdate();
+                        try (ResultSet rs = insertCatalogPs.getGeneratedKeys()) {
+                            if (rs.next()) {
+                                diseaseId = rs.getInt(1);
+                            }
+                        }
+                    }
+                }
+                if (diseaseId == 0) {
+                    conn.rollback();
+                    return false;
+                }
+                // 2. Insert link into IntegranteEnfermedad
+                String insertLinkSql = "INSERT INTO IntegranteEnfermedad (IdIntegrante, IdEnfermedad, Medicina, Dosis) VALUES (?, ?, ?, ?)";
+                try (PreparedStatement ps = conn.prepareStatement(insertLinkSql)) {
+                    ps.setInt(1, memberId);
+                    ps.setInt(2, diseaseId);
+                    ps.setString(3, name);
+                    ps.setString(4, dose != null ? dose : "");
+                    int rows = ps.executeUpdate();
+                    conn.commit();
+                    return rows > 0;
+                }
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
         }
     }
 
     @Override
     public boolean updateCondition(int conditionId, String name, String dose) throws SQLException {
-        String sql = "UPDATE Enfermedad SET Nombre = ?, Medicina = ?, Dosis = ? WHERE IdEnfermedad = ?";
-        try (Connection conn = DatabaseConfig.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, name);
-            ps.setString(2, name);
-            ps.setString(3, dose != null ? dose : "");
-            ps.setInt(4, conditionId);
-            return ps.executeUpdate() > 0;
+        int memberId = conditionId / 100000;
+        int oldDiseaseId = conditionId % 100000;
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                int diseaseId = 0;
+                // 1. Find or create in Enfermedad catalog
+                String findSql = "SELECT IdEnfermedad FROM Enfermedad WHERE Nombre = ?";
+                try (PreparedStatement findPs = conn.prepareStatement(findSql)) {
+                    findPs.setString(1, name);
+                    try (ResultSet rs = findPs.executeQuery()) {
+                        if (rs.next()) {
+                            diseaseId = rs.getInt("IdEnfermedad");
+                        }
+                    }
+                }
+                if (diseaseId == 0) {
+                    String insertCatalogSql = "INSERT INTO Enfermedad (Nombre) VALUES (?)";
+                    try (PreparedStatement insertCatalogPs = conn.prepareStatement(insertCatalogSql, Statement.RETURN_GENERATED_KEYS)) {
+                        insertCatalogPs.setString(1, name);
+                        insertCatalogPs.executeUpdate();
+                        try (ResultSet rs = insertCatalogPs.getGeneratedKeys()) {
+                            if (rs.next()) {
+                                diseaseId = rs.getInt(1);
+                            }
+                        }
+                    }
+                }
+                if (diseaseId == 0) {
+                    conn.rollback();
+                    return false;
+                }
+                // 2. Update link in IntegranteEnfermedad
+                String updateLinkSql = "UPDATE IntegranteEnfermedad SET IdEnfermedad = ?, Medicina = ?, Dosis = ? WHERE IdIntegrante = ? AND IdEnfermedad = ?";
+                try (PreparedStatement ps = conn.prepareStatement(updateLinkSql)) {
+                    ps.setInt(1, diseaseId);
+                    ps.setString(2, name);
+                    ps.setString(3, dose != null ? dose : "");
+                    ps.setInt(4, memberId);
+                    ps.setInt(5, oldDiseaseId);
+                    int rows = ps.executeUpdate();
+                    conn.commit();
+                    return rows > 0;
+                }
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
         }
     }
 
     @Override
     public boolean deleteCondition(int conditionId) throws SQLException {
-        String sql = "DELETE FROM Enfermedad WHERE IdEnfermedad = ?";
+        int memberId = conditionId / 100000;
+        int diseaseId = conditionId % 100000;
+        String sql = "DELETE FROM IntegranteEnfermedad WHERE IdIntegrante = ? AND IdEnfermedad = ?";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, conditionId);
+            ps.setInt(1, memberId);
+            ps.setInt(2, diseaseId);
             return ps.executeUpdate() > 0;
         }
     }

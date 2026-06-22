@@ -319,18 +319,23 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
     @Override
     public List<VaccineDTO> getVaccinesByPet(int petId) throws SQLException {
         List<VaccineDTO> list = new ArrayList<>();
-        String sql = "SELECT IdVacuna, Nombre FROM Vacunas WHERE IdMascota = ?";
+        String sql = "SELECT mv.IdVacuna, v.Nombre, mv.FechaAplicacion " +
+                     "FROM MascotaVacuna mv " +
+                     "JOIN Vacuna v ON mv.IdVacuna = v.IdVacuna " +
+                     "WHERE mv.IdMascota = ?";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, petId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     int vacId = rs.getInt("IdVacuna");
-                    Map<String, Object> extra = extraData.getOrDefault("vaccine_" + vacId, Map.of());
-                    String dateVal = (String) extra.getOrDefault("date", java.time.LocalDate.now().toString());
+                    Date fechaDate = rs.getDate("FechaAplicacion");
+                    String dateVal = fechaDate != null ? fechaDate.toString() : java.time.LocalDate.now().toString();
+
+                    int relationId = petId * 100000 + vacId;
 
                     VaccineDTO dto = new VaccineDTO();
-                    dto.setId(vacId);
+                    dto.setId(relationId);
                     dto.setName(rs.getString("Nombre") != null ? rs.getString("Nombre") : "");
                     dto.setDate(dateVal);
                     dto.setPet_id(petId);
@@ -343,20 +348,25 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
 
     @Override
     public VaccineDTO getVaccineById(int vaccineId) throws SQLException {
-        String sql = "SELECT IdVacuna, Nombre, IdMascota FROM Vacunas WHERE IdVacuna = ?";
+        int petId = vaccineId / 100000;
+        int vacCatalogId = vaccineId % 100000;
+        String sql = "SELECT mv.IdVacuna, v.Nombre, mv.FechaAplicacion " +
+                     "FROM MascotaVacuna mv " +
+                     "JOIN Vacuna v ON mv.IdVacuna = v.IdVacuna " +
+                     "WHERE mv.IdMascota = ? AND mv.IdVacuna = ?";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, vaccineId);
+            ps.setInt(1, petId);
+            ps.setInt(2, vacCatalogId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    int vacId = rs.getInt("IdVacuna");
-                    Map<String, Object> extra = extraData.getOrDefault("vaccine_" + vacId, Map.of());
-                    String dateVal = (String) extra.getOrDefault("date", java.time.LocalDate.now().toString());
+                    Date fechaDate = rs.getDate("FechaAplicacion");
+                    String dateVal = fechaDate != null ? fechaDate.toString() : java.time.LocalDate.now().toString();
 
                     VaccineDTO dto = new VaccineDTO();
-                    dto.setId(vacId);
+                    dto.setId(vaccineId);
                     dto.setName(rs.getString("Nombre"));
-                    dto.setPet_id(rs.getInt("IdMascota"));
+                    dto.setPet_id(petId);
                     dto.setDate(dateVal);
                     return dto;
                 }
@@ -370,61 +380,130 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         String name = dto.getName();
         String dateStr = dto.getDate();
         Integer petId = dto.getPet_id();
+        if (petId == null) petId = 1;
 
-        String sql = "INSERT INTO Vacunas (Nombre, IdMascota) VALUES (?, ?)";
-        try (Connection conn = DatabaseConfig.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-           ps.setString(1, name);
-           ps.setInt(2, petId != null ? petId : 1);
-           ps.executeUpdate();
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                int vaccineCatalogId = 0;
+                // 1. Find or create in Vacuna catalog
+                String findSql = "SELECT IdVacuna FROM Vacuna WHERE Nombre = ?";
+                try (PreparedStatement findPs = conn.prepareStatement(findSql)) {
+                    findPs.setString(1, name);
+                    try (ResultSet rs = findPs.executeQuery()) {
+                        if (rs.next()) {
+                            vaccineCatalogId = rs.getInt("IdVacuna");
+                        }
+                    }
+                }
+                if (vaccineCatalogId == 0) {
+                    String insertCatalogSql = "INSERT INTO Vacuna (Nombre) VALUES (?)";
+                    try (PreparedStatement insertCatalogPs = conn.prepareStatement(insertCatalogSql, Statement.RETURN_GENERATED_KEYS)) {
+                        insertCatalogPs.setString(1, name);
+                        insertCatalogPs.executeUpdate();
+                        try (ResultSet rs = insertCatalogPs.getGeneratedKeys()) {
+                            if (rs.next()) {
+                                vaccineCatalogId = rs.getInt(1);
+                            }
+                        }
+                    }
+                }
+                if (vaccineCatalogId == 0) {
+                    conn.rollback();
+                    return 0;
+                }
 
-           int generatedId = 0;
-           try (ResultSet rs = ps.getGeneratedKeys()) {
-               if (rs.next()) {
-                   generatedId = rs.getInt(1);
-               }
-           }
-
-           if (generatedId > 0) {
-               Map<String, Object> extra = new HashMap<>();
-               extra.put("date", dateStr != null ? dateStr : java.time.LocalDate.now().toString());
-               extraData.put("vaccine_" + generatedId, extra);
-           }
-           return generatedId;
+                // 2. Insert into MascotaVacuna
+                String insertLinkSql = "INSERT INTO MascotaVacuna (IdMascota, IdVacuna, FechaAplicacion) VALUES (?, ?, ?)";
+                try (PreparedStatement ps = conn.prepareStatement(insertLinkSql)) {
+                    ps.setInt(1, petId);
+                    ps.setInt(2, vaccineCatalogId);
+                    ps.setDate(3, dateStr != null && !dateStr.isEmpty() ? Date.valueOf(dateStr) : Date.valueOf(java.time.LocalDate.now()));
+                    int rows = ps.executeUpdate();
+                    if (rows > 0) {
+                        conn.commit();
+                        return petId * 100000 + vaccineCatalogId;
+                    }
+                }
+                conn.rollback();
+                return 0;
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
         }
     }
 
     @Override
     public boolean updateVaccine(int vaccineId, VaccineDTO dto) throws SQLException {
+        int oldPetId = vaccineId / 100000;
+        int oldVacCatalogId = vaccineId % 100000;
         String name = dto.getName();
         String dateStr = dto.getDate();
 
-        String sql = "UPDATE Vacunas SET Nombre = ? WHERE IdVacuna = ?";
-        try (Connection conn = DatabaseConfig.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, name);
-            ps.setInt(2, vaccineId);
-            boolean updated = ps.executeUpdate() > 0;
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                int newVaccineCatalogId = 0;
+                // 1. Find or create in Vacuna catalog
+                String findSql = "SELECT IdVacuna FROM Vacuna WHERE Nombre = ?";
+                try (PreparedStatement findPs = conn.prepareStatement(findSql)) {
+                    findPs.setString(1, name);
+                    try (ResultSet rs = findPs.executeQuery()) {
+                        if (rs.next()) {
+                            newVaccineCatalogId = rs.getInt("IdVacuna");
+                        }
+                    }
+                }
+                if (newVaccineCatalogId == 0) {
+                    String insertCatalogSql = "INSERT INTO Vacuna (Nombre) VALUES (?)";
+                    try (PreparedStatement insertCatalogPs = conn.prepareStatement(insertCatalogSql, Statement.RETURN_GENERATED_KEYS)) {
+                        insertCatalogPs.setString(1, name);
+                        insertCatalogPs.executeUpdate();
+                        try (ResultSet rs = insertCatalogPs.getGeneratedKeys()) {
+                            if (rs.next()) {
+                                newVaccineCatalogId = rs.getInt(1);
+                            }
+                        }
+                    }
+                }
+                if (newVaccineCatalogId == 0) {
+                    conn.rollback();
+                    return false;
+                }
 
-            if (updated) {
-                Map<String, Object> extra = extraData.computeIfAbsent("vaccine_" + vaccineId, k -> new HashMap<>());
-                extra.put("date", dateStr != null ? dateStr : java.time.LocalDate.now().toString());
+                // 2. Update MascotaVacuna
+                String sql = "UPDATE MascotaVacuna SET IdVacuna = ?, FechaAplicacion = ? WHERE IdMascota = ? AND IdVacuna = ?";
+                try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setInt(1, newVaccineCatalogId);
+                    ps.setDate(2, dateStr != null && !dateStr.isEmpty() ? Date.valueOf(dateStr) : Date.valueOf(java.time.LocalDate.now()));
+                    ps.setInt(3, oldPetId);
+                    ps.setInt(4, oldVacCatalogId);
+                    int rows = ps.executeUpdate();
+                    conn.commit();
+                    return rows > 0;
+                }
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
             }
-            return updated;
         }
     }
 
     @Override
     public boolean deleteVaccine(int vaccineId) throws SQLException {
-        String sql = "DELETE FROM Vacunas WHERE IdVacuna = ?";
+        int petId = vaccineId / 100000;
+        int vacCatalogId = vaccineId % 100000;
+        String sql = "DELETE FROM MascotaVacuna WHERE IdMascota = ? AND IdVacuna = ?";
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, vaccineId);
-            boolean deleted = ps.executeUpdate() > 0;
-            if (deleted) {
-                extraData.remove("vaccine_" + vaccineId);
-            }
-            return deleted;
+            ps.setInt(1, petId);
+            ps.setInt(2, vacCatalogId);
+            return ps.executeUpdate() > 0;
         }
     }
 

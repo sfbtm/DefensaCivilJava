@@ -180,9 +180,12 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
     @Override
     public Map<String, Object> getPlanById(int planId) throws SQLException {
         String sql = """
-            SELECT p.IdPlanFamiliar, f.Nombre AS FamiliaNombre, f.Telefono, f.Sector, f.CalidadVivienda, p.Estado
+            SELECT p.IdPlanFamiliar, f.Nombre AS FamiliaNombre, f.Telefono, f.IdSector, f.IdCalidad, p.Estado,
+                   s.Nombre AS SectorNombre, cv.Nombre AS CalidadNombre
             FROM PlanFamiliar p
             JOIN Familia f ON p.IdFamilia = f.IdFamilia
+            LEFT JOIN Sector s ON f.IdSector = s.IdSector
+            LEFT JOIN CalidadVivienda cv ON f.IdCalidad = cv.IdCalidad
             WHERE p.IdPlanFamiliar = ?
             """;
         Map<String, Object> item = new HashMap<>();
@@ -212,8 +215,13 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
                         familyType = "No Vulnerable";
                     }
 
+                    String famName = rs.getString("FamiliaNombre");
+                    if (famName != null && famName.startsWith("Familia ")) {
+                        famName = famName.substring(8);
+                    }
+
                     item.put("id", rs.getInt("IdPlanFamiliar"));
-                    item.put("last_names", rs.getString("FamiliaNombre"));
+                    item.put("last_names", famName != null ? famName : "");
                     item.put("family_type", familyType);
                     item.put("family_type_id", familyTypeId);
                     item.put("landline_phone", rs.getString("Telefono") != null ? rs.getString("Telefono") : "");
@@ -225,10 +233,19 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
                     item.put("department_id", extra.getOrDefault("department_id", 1));
                     item.put("city_id", extra.getOrDefault("city_id", 1));
                     item.put("address", extra.getOrDefault("address", ""));
-                    item.put("sector_id", extra.getOrDefault("sector_id", 1));
-                    item.put("sector_name", extra.getOrDefault("sector_name", ""));
-                    item.put("housing_quality_id", extra.getOrDefault("housing_quality_id", 1));
-                    item.put("housing_quality", "Propia");
+                    
+                    int dbSectorId = rs.getInt("IdSector");
+                    item.put("sector_id", rs.wasNull() ? 1 : dbSectorId);
+                    
+                    String dbSectorName = rs.getString("SectorNombre");
+                    item.put("sector_name", dbSectorName != null ? dbSectorName : "");
+                    
+                    int dbCalidadId = rs.getInt("IdCalidad");
+                    item.put("housing_quality_id", rs.wasNull() ? 1 : dbCalidadId);
+                    
+                    String dbCalidadName = rs.getString("CalidadNombre");
+                    item.put("housing_quality", dbCalidadName != null ? dbCalidadName : "Propia");
+                    
                     item.put("city", "Medellín");
                     item.put("department", "Antioquia");
                     item.put("created_at", LocalDate.now().toString());
@@ -452,9 +469,24 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
         int familyId = 0;
         int planId = 0;
         try (Connection conn = DatabaseConfig.getConnection()) {
-            String sqlFam = "INSERT INTO Familia (Nombre) VALUES (?)";
+            String sqlFam = "INSERT INTO Familia (Nombre, IdSector, IdCalidad) VALUES (?, ?, ?)";
             try (PreparedStatement ps = conn.prepareStatement(sqlFam, Statement.RETURN_GENERATED_KEYS)) {
                 ps.setString(1, "Familia " + lastNames);
+                
+                Object sectorIdObj = body.get("sector_id");
+                Integer sectorId = null;
+                if (sectorIdObj instanceof Number) sectorId = ((Number) sectorIdObj).intValue();
+                else if (sectorIdObj instanceof String) sectorId = Integer.parseInt((String) sectorIdObj);
+                if (sectorId != null && sectorId > 0) ps.setInt(2, sectorId);
+                else ps.setNull(2, Types.INTEGER);
+
+                Object qualityIdObj = body.get("housing_quality_id");
+                Integer qualityId = null;
+                if (qualityIdObj instanceof Number) qualityId = ((Number) qualityIdObj).intValue();
+                else if (qualityIdObj instanceof String) qualityId = Integer.parseInt((String) qualityIdObj);
+                if (qualityId != null && qualityId > 0) ps.setInt(3, qualityId);
+                else ps.setNull(3, Types.INTEGER);
+
                 ps.executeUpdate();
                 try (ResultSet rs = ps.getGeneratedKeys()) {
                     if (rs.next()) {
@@ -507,12 +539,26 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
             }
 
             if (familyId > 0) {
-                String sql = "UPDATE Familia SET Nombre = ?, Telefono = ?, CalidadVivienda = ? WHERE IdFamilia = ?";
+                String sql = "UPDATE Familia SET Nombre = ?, Telefono = ?, IdSector = ?, IdCalidad = ? WHERE IdFamilia = ?";
                 try (PreparedStatement ps = conn.prepareStatement(sql)) {
                     ps.setString(1, "Familia " + lastNames);
                     ps.setString(2, landlinePhone != null ? landlinePhone : "");
-                    ps.setString(3, "propietario"); // Default calidad
-                    ps.setInt(4, familyId);
+                    
+                    Object sectorIdObj = body.get("sector_id");
+                    Integer sectorId = null;
+                    if (sectorIdObj instanceof Number) sectorId = ((Number) sectorIdObj).intValue();
+                    else if (sectorIdObj instanceof String) sectorId = Integer.parseInt((String) sectorIdObj);
+                    if (sectorId != null && sectorId > 0) ps.setInt(3, sectorId);
+                    else ps.setNull(3, Types.INTEGER);
+
+                    Object qualityIdObj = body.get("housing_quality_id");
+                    Integer qualityId = null;
+                    if (qualityIdObj instanceof Number) qualityId = ((Number) qualityIdObj).intValue();
+                    else if (qualityIdObj instanceof String) qualityId = Integer.parseInt((String) qualityIdObj);
+                    if (qualityId != null && qualityId > 0) ps.setInt(4, qualityId);
+                    else ps.setNull(4, Types.INTEGER);
+
+                    ps.setInt(5, familyId);
                     ps.executeUpdate();
                 }
             } else {
