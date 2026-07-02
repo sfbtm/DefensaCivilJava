@@ -7,8 +7,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Implementación de la interfaz {@link MasterDataDAO} que realiza operaciones
+ * CRUD genéricas sobre tablas de catálogo y maestras utilizando sentencias SQL estructuradas dinámicamente.
+ */
 public class MasterDataDAOImpl implements MasterDataDAO {
 
+    /**
+     * Mapea una fila del {@link ResultSet} a un mapa de datos, utilizando la configuración de columnas
+     * y tipos provistos en {@link EntityConfig}.
+     *
+     * @param rs El {@link ResultSet} con el cursor en la fila actual.
+     * @param cfg Configuración de mapeo de la entidad.
+     * @return Un mapa con las claves JSON configuradas y sus respectivos valores mapeados.
+     * @throws SQLException Si ocurre un error al leer el {@link ResultSet}.
+     */
     private Map<String, Object> mapRow(ResultSet rs, EntityConfig cfg) throws SQLException {
         Map<String, Object> item = new HashMap<>();
         item.put("id", rs.getInt(cfg.idCol));
@@ -31,6 +44,10 @@ public class MasterDataDAOImpl implements MasterDataDAO {
         return item;
     }
 
+    /**
+     * {@inheritDoc}
+     * Realiza una consulta SELECT dinamizada con el nombre de la tabla y ordena por ID de forma descendente.
+     */
     @Override
     public List<Map<String, Object>> getAll(EntityConfig cfg) throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -47,6 +64,10 @@ public class MasterDataDAOImpl implements MasterDataDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Realiza un SELECT dinamizado por el nombre de la tabla y columna ID filtrando por un parámetro.
+     */
     @Override
     public Map<String, Object> getById(EntityConfig cfg, int id) throws SQLException {
         String sql = String.format("SELECT * FROM %s WHERE %s = ?", cfg.tableName, cfg.idCol);
@@ -63,6 +84,10 @@ public class MasterDataDAOImpl implements MasterDataDAO {
         return null;
     }
 
+    /**
+     * {@inheritDoc}
+     * Ejecuta una consulta de conteo y otra paginada con LIMIT y OFFSET, filtrando opcionalmente por registros activos.
+     */
     @Override
     public Map<String, Object> getPaginated(EntityConfig cfg, int page, int perPage) throws SQLException {
         int offset = (page - 1) * perPage;
@@ -113,6 +138,10 @@ public class MasterDataDAOImpl implements MasterDataDAO {
         return responseMap;
     }
 
+    /**
+     * {@inheritDoc}
+     * Construye dinámicamente una sentencia INSERT INTO con los campos descriptivos y extra configurados.
+     */
     @Override
     public boolean insert(EntityConfig cfg, Map<String, Object> body) throws SQLException {
         List<String> columns = new ArrayList<>();
@@ -174,6 +203,10 @@ public class MasterDataDAOImpl implements MasterDataDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Construye dinámicamente una sentencia UPDATE con las cláusulas SET correspondientes a las claves presentes en el cuerpo.
+     */
     @Override
     public boolean update(EntityConfig cfg, int id, Map<String, Object> body) throws SQLException {
         List<String> setClauses = new ArrayList<>();
@@ -224,6 +257,10 @@ public class MasterDataDAOImpl implements MasterDataDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza el estado de activación en la base de datos identificando cuál es la columna 'Activo'/'Activa'.
+     */
     @Override
     public boolean updateStatus(EntityConfig cfg, int id, int active) throws SQLException {
         String activeCol = null;
@@ -248,6 +285,10 @@ public class MasterDataDAOImpl implements MasterDataDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Ejecuta una sentencia DELETE FROM dinámica para eliminar físicamente un registro.
+     */
     @Override
     public boolean delete(EntityConfig cfg, int id) throws SQLException {
         String sql = String.format("DELETE FROM %s WHERE %s = ?", cfg.tableName, cfg.idCol);

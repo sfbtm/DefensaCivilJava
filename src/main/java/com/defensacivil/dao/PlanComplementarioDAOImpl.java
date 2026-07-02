@@ -11,16 +11,30 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Implementación de la interfaz {@link PlanComplementarioDAO} que gestiona la persistencia
+ * de gráficos de vivienda, planes de acción, vacunas y recursos disponibles mediante consultas JDBC directas.
+ */
 public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
 
     private final Map<String, Map<String, Object>> extraData;
 
+    /**
+     * Constructor que recibe el mapa de almacenamiento en memoria para campos no mapeados
+     * en el modelo relacional (ej. descripciones de recursos).
+     *
+     * @param extraData Mapa de almacenamiento para información adicional.
+     */
     public PlanComplementarioDAOImpl(Map<String, Map<String, Object>> extraData) {
         this.extraData = extraData;
     }
 
     // --- HOUSING INFO & GRAPHICS ---
 
+    /**
+     * {@inheritDoc}
+     * Recupera el croquis (EsEntorno=0) o plano del entorno (EsEntorno=1) según el typeId provisto.
+     */
     @Override
     public HousingInfoDTO getHousingInfo(int planId, int typeId) throws SQLException {
         int esEntornoVal = (typeId == 2) ? 1 : 0;
@@ -43,6 +57,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         return null;
     }
 
+    /**
+     * {@inheritDoc}
+     * Guarda un nuevo gráfico o actualiza el existente si corresponde al plano del entorno.
+     */
     @Override
     public boolean saveOrUpdateHousingGraphic(int planId, String savedFileName, String description, int esEntornoVal) throws SQLException {
         try (Connection conn = DatabaseConfig.getConnection()) {
@@ -82,6 +100,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Recupera todos los gráficos asociados al plan familiar que no correspondan al entorno (EsEntorno=0).
+     */
     @Override
     public List<HousingInfoDTO> getHousingGraphicsByPlan(int planId) throws SQLException {
         List<HousingInfoDTO> list = new ArrayList<>();
@@ -103,6 +125,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Recupera un gráfico específico a partir de su identificador único de base de datos.
+     */
     @Override
     public HousingInfoDTO getHousingGraphicById(int id) throws SQLException {
         String sql = "SELECT IdGrafico, RutaImagen, Descripcion, IdPlanFamiliar FROM GraficoVivienda WHERE IdGrafico = ?";
@@ -123,6 +149,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         return null;
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza la descripción asociada a una imagen o croquis de la vivienda.
+     */
     @Override
     public boolean updateHousingGraphicDescription(int id, String description) throws SQLException {
         String sql = "UPDATE GraficoVivienda SET Descripcion = ? WHERE IdGrafico = ?";
@@ -134,6 +164,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Elimina físicamente el croquis de vivienda por su identificador único.
+     */
     @Override
     public boolean deleteHousingGraphic(int id) throws SQLException {
         String sql = "DELETE FROM GraficoVivienda WHERE IdGrafico = ?";
@@ -146,6 +180,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
 
     // --- ACTION PLANS & ACTIONS ---
 
+    /**
+     * {@inheritDoc}
+     * Verifica la existencia de un plan de acción realizando un JOIN con FactorRiesgo para filtrar por plan familiar.
+     */
     @Override
     public boolean hasActionPlan(int planId) throws SQLException {
         String sql = "SELECT COUNT(*) FROM PlanAccion pa JOIN FactorRiesgo fr ON pa.IdFactorRiesgo = fr.IdFactorRiesgo WHERE fr.IdPlanFamiliar = ?";
@@ -161,6 +199,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         return false;
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene el plan de acción (ID y coordinador) cruzando información con FactorRiesgo.
+     */
     @Override
     public ActionPlanDTO getActionPlanByPlan(int planId) throws SQLException {
         String sql = "SELECT pa.IdPlanAccion, pa.IdCoordinador FROM PlanAccion pa JOIN FactorRiesgo fr ON pa.IdFactorRiesgo = fr.IdFactorRiesgo WHERE fr.IdPlanFamiliar = ? LIMIT 1";
@@ -180,6 +222,11 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         return null;
     }
 
+    /**
+     * {@inheritDoc}
+     * Crea transaccionalmente un plan de acción. Si el plan familiar no posee un factor de riesgo
+     * registrado, lo crea automáticamente antes de insertar el plan de acción.
+     */
     @Override
     public boolean createActionPlan(int planId, int coordinatorId) throws SQLException {
         String sql = "INSERT INTO PlanAccion (IdFactorRiesgo, IdCoordinador) VALUES (?, ?)";
@@ -220,6 +267,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene la lista de acciones asignadas en el plan de acción, incluyendo datos del integrante responsable.
+     */
     @Override
     public List<ActionDTO> getActionsByActionPlan(int actionPlanId) throws SQLException {
         List<ActionDTO> list = new ArrayList<>();
@@ -250,6 +301,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Recupera una acción específica por su identificador, incluyendo los nombres del integrante responsable.
+     */
     @Override
     public ActionDTO getActionById(int id) throws SQLException {
         String sql = "SELECT a.IdAccion, a.IdResponsable, a.Etapa, a.Descripcion, i.Nombre, i.Apellido " +
@@ -279,6 +334,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         return null;
     }
 
+    /**
+     * {@inheritDoc}
+     * Registra una nueva acción o tarea a realizar dentro del plan de acción.
+     */
     @Override
     public boolean insertAction(int actionPlanId, int memberId, String stage, String description) throws SQLException {
         String sql = "INSERT INTO Accion (IdPlanAccion, IdResponsable, Etapa, Descripcion) VALUES (?, ?, ?, ?)";
@@ -292,6 +351,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza el responsable y la descripción de la acción.
+     */
     @Override
     public boolean updateAction(int id, int memberId, String description) throws SQLException {
         String sql = "UPDATE Accion SET IdResponsable = ?, Descripcion = ? WHERE IdAccion = ?";
@@ -304,6 +367,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Elimina una acción/tarea del plan de acción por su identificador.
+     */
     @Override
     public boolean deleteAction(int id) throws SQLException {
         String sql = "DELETE FROM Accion WHERE IdAccion = ?";
@@ -316,6 +383,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
 
     // --- PET VACCINES ---
 
+    /**
+     * {@inheritDoc}
+     * Recupera el historial de vacunas de la mascota, calculando y asignando un ID compuesto de relación.
+     */
     @Override
     public List<VaccineDTO> getVaccinesByPet(int petId) throws SQLException {
         List<VaccineDTO> list = new ArrayList<>();
@@ -346,6 +417,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene una vacuna específica descodificando su ID de relación compuesto.
+     */
     @Override
     public VaccineDTO getVaccineById(int vaccineId) throws SQLException {
         int petId = vaccineId / 100000;
@@ -375,6 +450,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         return null;
     }
 
+    /**
+     * {@inheritDoc}
+     * Inserta transaccionalmente una vacuna para la mascota, creándola en el catálogo de vacunas previamente si no existe.
+     */
     @Override
     public int insertVaccine(VaccineDTO dto) throws SQLException {
         String name = dto.getName();
@@ -436,6 +515,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza transaccionalmente la vacuna asignada a la mascota descodificando su ID compuesto.
+     */
     @Override
     public boolean updateVaccine(int vaccineId, VaccineDTO dto) throws SQLException {
         int oldPetId = vaccineId / 100000;
@@ -494,6 +577,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Elimina el registro de aplicación de vacuna decodificando el ID compuesto.
+     */
     @Override
     public boolean deleteVaccine(int vaccineId) throws SQLException {
         int petId = vaccineId / 100000;
@@ -509,6 +596,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
 
     // --- AVAILABLE RESOURCES ---
 
+    /**
+     * {@inheritDoc}
+     * Obtiene todos los recursos comunitarios externos, recuperando la descripción desde el extraData de memoria.
+     */
     @Override
     public List<Map<String, Object>> getAvailableResourcesByPlan(int planId) throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -543,6 +634,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Busca un recurso comunitario cercano por su identificador y asocia la descripción desde el extraData.
+     */
     @Override
     public Map<String, Object> getAvailableResourceById(int idVal) throws SQLException {
         Map<String, Object> item = new HashMap<>();
@@ -572,6 +667,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         return item;
     }
 
+    /**
+     * {@inheritDoc}
+     * Inserta un recurso comunitario cercano en la base de datos y almacena su descripción en memoria (extraData).
+     */
     @Override
     public boolean insertAvailableResource(int planId, int resourceId, String description, String location, float distance, String phone) throws SQLException {
         int serviceId = 1;
@@ -617,6 +716,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza la información física del recurso y su descripción asociada en el extraData.
+     */
     @Override
     public boolean updateAvailableResource(int idVal, int resourceId, String description, String location, float distance, String phone) throws SQLException {
         int serviceId = 1;
@@ -652,6 +755,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Elimina el recurso de la base de datos y remueve su descripción de la caché extraData.
+     */
     @Override
     public boolean deleteAvailableResource(int idVal) throws SQLException {
         String sql = "DELETE FROM RecursoDisponible WHERE IdRecurso = ?";

@@ -7,14 +7,27 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Implementación de la interfaz {@link VulnerabilidadDAO} que gestiona la persistencia
+ * de factores de riesgo, vulnerabilidades estructurales y respuestas del test mediante consultas JDBC directas.
+ */
 public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
 
     private final Map<String, Map<String, Object>> extraData;
 
+    /**
+     * Constructor de la clase.
+     *
+     * @param extraData Mapa para persistir en memoria información adicional.
+     */
     public VulnerabilidadDAOImpl(Map<String, Map<String, Object>> extraData) {
         this.extraData = extraData;
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene una lista simplificada de factores de riesgo con su nombre de amenaza y ubicación concatentados.
+     */
     @Override
     public List<Map<String, Object>> getRiskFactorsForSelect(int planId) throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -39,6 +52,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene todos los factores de riesgo de un plan, combinando campos de la base de datos con extraData.
+     */
     @Override
     public List<Map<String, Object>> getRiskFactorsByPlan(int planId) throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -73,6 +90,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene los detalles de un factor de riesgo por su ID, cruzándolo con extraData en memoria.
+     */
     @Override
     public Map<String, Object> getRiskFactorById(int riskId) throws SQLException {
         String sql = """
@@ -103,6 +124,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         return risk;
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene todos los factores de riesgo registrados a nivel general en la base de datos.
+     */
     @Override
     public List<Map<String, Object>> getAllRiskFactors() throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -130,6 +155,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Inserta un factor de riesgo y almacena sus campos extra (descripción y distancia) en la caché de memoria.
+     */
     @Override
     public int addRiskFactor(Map<String, Object> body) throws SQLException {
         Object threatObj = body.get("threat_type_id");
@@ -173,6 +202,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza el factor de riesgo en la base de datos y sus campos extra en memoria caché.
+     */
     @Override
     public boolean updateRiskFactor(int riskId, Map<String, Object> body) throws SQLException {
         Object threatObj = body.get("threat_type_id");
@@ -204,6 +237,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         return false;
     }
 
+    /**
+     * {@inheritDoc}
+     * Elimina transaccionalmente un factor de riesgo, removiendo primero sus dependencias en la tabla Vulnerabilidad.
+     */
     @Override
     public boolean deleteRiskFactor(int riskId) throws SQLException {
         try (Connection conn = DatabaseConfig.getConnection()) {
@@ -232,6 +269,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene las vulnerabilidades estructurales asociadas a un factor de riesgo mediante un JOIN.
+     */
     @Override
     public List<Map<String, Object>> getVulnerabilitiesByRiskFactor(int riskId) throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -257,6 +298,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Busca y obtiene la información de una vulnerabilidad específica por su ID.
+     */
     @Override
     public Map<String, Object> getVulnerabilityById(int vulnerabilityId) throws SQLException {
         String sql = """
@@ -283,6 +328,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         return item;
     }
 
+    /**
+     * {@inheritDoc}
+     * Inserta un nuevo registro de vulnerabilidad traduciendo el ID de grado a su descripción textual.
+     */
     @Override
     public boolean addVulnerability(Map<String, Object> body) throws SQLException {
         Object vulnIdObj = body.get("vulnerability_id");
@@ -312,6 +361,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza el tipo y grado de vulnerabilidad de un registro existente.
+     */
     @Override
     public boolean updateVulnerability(int vulnerabilityId, Map<String, Object> body) throws SQLException {
         Object vulnIdObj = body.get("vulnerability_id");
@@ -334,6 +387,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Elimina físicamente una vulnerabilidad estructural por su ID.
+     */
     @Override
     public boolean deleteVulnerability(int vulnerabilityId) throws SQLException {
         String sql = "DELETE FROM Vulnerabilidad WHERE IdVulnerabilidad = ?";
@@ -345,6 +402,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Registra o actualiza de manera condicional (upsert) la respuesta del test de vulnerabilidad.
+     */
     @Override
     public boolean saveOrUpdateVulnerableTestAnswer(int planId, int questionId, boolean answer) throws SQLException {
         try (Connection conn = DatabaseConfig.getConnection()) {

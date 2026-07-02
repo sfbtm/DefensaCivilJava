@@ -4,6 +4,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
+/**
+ * Clase de configuración para la conexión a la base de datos MySQL.
+ * Proporciona el controlador JDBC necesario y expone un método estático
+ * para obtener una conexión activa.
+ */
 public class DatabaseConfig {
 
     private static final String URL =
@@ -21,6 +26,12 @@ public class DatabaseConfig {
         }
     }
 
+    /**
+     * Establece y retorna una conexión a la base de datos MySQL configurada.
+     *
+     * @return Una instancia de {@link Connection} conectada a la base de datos.
+     * @throws SQLException Si ocurre un error de acceso a la base de datos o la URL es inválida.
+     */
     public static Connection getConnection() throws SQLException {
         return DriverManager.getConnection(URL, USER, PASSWORD);
     }

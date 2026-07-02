@@ -8,14 +8,29 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Implementación de la interfaz {@link IntegranteDAO} que gestiona la persistencia
+ * de integrantes y sus condiciones médicas mediante consultas SQL directas y almacenamiento en memoria
+ * para datos no mapeados en la base de datos relacional.
+ */
 public class IntegranteDAOImpl implements IntegranteDAO {
 
     private final Map<String, Map<String, Object>> extraData;
 
+    /**
+     * Constructor de la clase que recibe un mapa para persistir temporalmente en memoria
+     * campos adicionales que no tienen correspondencia directa en las columnas físicas de la tabla Integrante.
+     *
+     * @param extraData Mapa de almacenamiento para información adicional (ej. eps, birth_date, document_number).
+     */
     public IntegranteDAOImpl(Map<String, Map<String, Object>> extraData) {
         this.extraData = extraData;
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene una lista simplificada de integrantes (ID y nombre completo) asociados a un plan familiar.
+     */
     @Override
     public List<Map<String, Object>> getMembersForSelect(int familyPlanId) throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -35,6 +50,11 @@ public class IntegranteDAOImpl implements IntegranteDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene todos los integrantes de un plan familiar, combinando columnas de la base de datos
+     * con la información adicional almacenada en memoria (extraData).
+     */
     @Override
     public List<Map<String, Object>> getMembersByFamilyPlan(int familyPlanId) throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -77,6 +97,11 @@ public class IntegranteDAOImpl implements IntegranteDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Recupera un integrante específico por su identificador, mapeando sus datos a un DTO
+     * y cargando la información adicional desde el mapa en memoria.
+     */
     @Override
     public MemberDTO getMemberById(int memberId) throws SQLException {
         String sql = """
@@ -116,6 +141,10 @@ public class IntegranteDAOImpl implements IntegranteDAO {
         return null;
     }
 
+    /**
+     * {@inheritDoc}
+     * Consulta general de todos los integrantes registrados y sus respectivos planes familiares.
+     */
     @Override
     public List<Map<String, Object>> getAllFamilyMembers() throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -133,6 +162,11 @@ public class IntegranteDAOImpl implements IntegranteDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Inserta un nuevo integrante en la base de datos y almacena sus campos adicionales
+     * (EPS, fecha de nacimiento, documento, tipo de sangre) en memoria (extraData).
+     */
     @Override
     public int addMember(int familyPlanId, MemberDTO dto) throws SQLException {
         String names = dto.getNames();
@@ -186,6 +220,11 @@ public class IntegranteDAOImpl implements IntegranteDAO {
         return -1;
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza la información básica del integrante en la base de datos y sus campos adicionales
+     * (EPS, fecha de nacimiento, documento, tipo de sangre) en memoria (extraData).
+     */
     @Override
     public boolean updateMember(int memberId, MemberDTO dto) throws SQLException {
         String names = dto.getNames();
@@ -233,6 +272,11 @@ public class IntegranteDAOImpl implements IntegranteDAO {
         return false;
     }
 
+    /**
+     * {@inheritDoc}
+     * Elimina al integrante de la base de datos de manera transaccional, removiendo primero
+     * las dependencias en la tabla IntegranteEnfermedad y luego el registro del integrante y sus datos de memoria.
+     */
     @Override
     public boolean deleteMember(int memberId) throws SQLException {
         try (Connection conn = DatabaseConfig.getConnection()) {
@@ -260,6 +304,11 @@ public class IntegranteDAOImpl implements IntegranteDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene las enfermedades asociadas a un integrante realizando un JOIN entre IntegranteEnfermedad
+     * y Enfermedad. Adicionalmente, genera un ID único combinando memberId y diseaseId.
+     */
     @Override
     public List<Map<String, Object>> getConditionsByMember(int memberId) throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -290,6 +339,10 @@ public class IntegranteDAOImpl implements IntegranteDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene los detalles de una condición médica específica por su ID compuesto (memberId * 100000 + diseaseId).
+     */
     @Override
     public Map<String, Object> getConditionById(int conditionId) throws SQLException {
         int memberId = conditionId / 100000;
@@ -319,6 +372,11 @@ public class IntegranteDAOImpl implements IntegranteDAO {
         return null;
     }
 
+    /**
+     * {@inheritDoc}
+     * Asocia una condición médica a un integrante. Si la enfermedad no existe en el catálogo
+     * (tabla Enfermedad), se crea previamente de forma transaccional.
+     */
     @Override
     public boolean addCondition(int memberId, String name, String dose) throws SQLException {
         try (Connection conn = DatabaseConfig.getConnection()) {
@@ -371,6 +429,11 @@ public class IntegranteDAOImpl implements IntegranteDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza la condición médica de un integrante usando el ID compuesto para identificar la relación anterior,
+     * permitiendo cambiar la enfermedad (creándola si no existe en el catálogo) y la dosis de forma transaccional.
+     */
     @Override
     public boolean updateCondition(int conditionId, String name, String dose) throws SQLException {
         int memberId = conditionId / 100000;
@@ -426,6 +489,11 @@ public class IntegranteDAOImpl implements IntegranteDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Elimina el enlace entre un integrante y una enfermedad de la tabla IntegranteEnfermedad
+     * decodificando el ID compuesto.
+     */
     @Override
     public boolean deleteCondition(int conditionId) throws SQLException {
         int memberId = conditionId / 100000;

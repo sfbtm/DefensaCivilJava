@@ -3,16 +3,20 @@ package com.defensacivil.dao;
 import java.sql.SQLException;
 import java.util.Map;
 
+/**
+ * Interfaz que define las operaciones de acceso a datos (DAO) para la gestión
+ * y autenticación de usuarios en el sistema.
+ */
 public interface UsuarioDAO {
     /**
-     * Authenticates a user by email and checks if the provided password is correct.
-     * Returns a map with user details and a "password_correct" boolean flag.
-     * Returns null if no user is found with the given email.
+     * Autentica un usuario por su correo electrónico y verifica si la contraseña proporcionada es correcta.
+     * Retorna un mapa con los detalles del usuario y una bandera booleana "password_correct".
+     * Retorna null si no se encuentra ningún usuario con el correo electrónico proporcionado.
      *
-     * @param email The user's email.
-     * @param password The raw password to verify.
-     * @return A map with user details or null if not found.
-     * @throws SQLException If a database access error occurs.
+     * @param email El correo electrónico del usuario.
+     * @param password La contraseña en texto plano para verificar.
+     * @return Un mapa con los detalles del usuario o null si no se encuentra.
+     * @throws SQLException Si ocurre un error de acceso a la base de datos.
      */
     Map<String, Object> autenticarUsuario(String email, String password) throws SQLException;
 }

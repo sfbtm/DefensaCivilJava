@@ -19,6 +19,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Servlet que gestiona la información gráfica y croquis de las viviendas asociadas a planes familiares.
+ * Permite subir archivos de imagen (croquis/gráficos), consultar información gráfica, actualizar
+ * descripciones y eliminar estos recursos, además de servir las imágenes almacenadas.
+ * 
+ * Mapea las siguientes rutas:
+ * - /api/housingInfo/*
+ * - /api/housingGraphics/*
+ * - /storage/*
+ */
 @WebServlet(urlPatterns = {
         "/api/housingInfo/*",
         "/api/housingGraphics/*",
@@ -31,6 +41,15 @@ public class HousingGraphicServlet extends HttpServlet {
     private static final Map<String, Map<String, Object>> extraData = new ConcurrentHashMap<>();
     private final PlanComplementarioDAO planComplementarioDAO = new PlanComplementarioDAOImpl(extraData);
 
+    /**
+     * Redirige las peticiones HTTP al método adecuado según el verbo, brindando soporte
+     * específico para peticiones HTTP PATCH.
+     * 
+     * @param req Petición HTTP recibida.
+     * @param resp Respuesta HTTP a enviar.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         if (req.getMethod().equalsIgnoreCase("PATCH")) {
@@ -40,6 +59,20 @@ public class HousingGraphicServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP GET para servir las imágenes almacenadas o consultar datos de vivienda.
+     * 
+     * Rutas y respuestas:
+     * - GET /storage/{fileName}: Sirve la imagen física del croquis. Si no existe, entrega la imagen por defecto (/public/familia.png).
+     * - GET /api/housingInfo/{planId}/type/{typeId}: Obtiene la información de vivienda de un plan familiar y tipo específicos (entorno = 2, interno = 1). Retorna success: HousingInfoDTO.
+     * - GET /api/housingGraphics/familyPlan/{planId}: Obtiene la lista de gráficos/croquis asociados a un plan familiar. Retorna success: List&lt;HousingInfoDTO&gt;.
+     * - GET /api/housingGraphics/{id}: Obtiene los detalles de un gráfico/croquis de vivienda específico por su ID. Retorna success: HousingInfoDTO.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP (JSON o flujo de bytes de imagen).
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String servletPath = req.getServletPath();
@@ -124,6 +157,19 @@ public class HousingGraphicServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP POST para subir archivos y crear croquis/gráficos de vivienda.
+     * Soporta solicitudes multiparte (multipart/form-data) para la subida de imágenes de croquis.
+     * 
+     * Endpoints:
+     * - POST /api/housingInfo o POST /api/housingGraphics: Guarda un gráfico/croquis subido. 
+     *   Parámetros (en multipart): family_plan_id (int), description (String), path (archivo de imagen).
+     * 
+     * @param req Petición HTTP que contiene la imagen y metadatos.
+     * @param resp Respuesta HTTP en formato JSON.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("application/json");
@@ -187,6 +233,17 @@ public class HousingGraphicServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP DELETE para eliminar un croquis/gráfico de vivienda y su archivo físico.
+     * 
+     * Endpoint:
+     * - DELETE /api/housingGraphics/{id}: Elimina el registro del gráfico por ID y borra el archivo de imagen del almacenamiento.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP en formato JSON.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("application/json");
@@ -221,6 +278,17 @@ public class HousingGraphicServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP PATCH para actualizar la descripción de un gráfico.
+     * 
+     * Endpoint:
+     * - PATCH /api/housingGraphics/{id}/description: Actualiza la descripción. Cuerpo JSON: { "description": String }
+     * 
+     * @param req Petición HTTP con JSON en el cuerpo.
+     * @param resp Respuesta HTTP en formato JSON.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     protected void doPatch(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
@@ -250,6 +318,13 @@ public class HousingGraphicServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Extrae un identificador numérico a partir del pathInfo, omitiendo opcionalmente un prefijo dado.
+     * 
+     * @param pathInfo Información de ruta de la petición.
+     * @param prefix Prefijo a omitir de la ruta.
+     * @return ID numérico parseado, o 0 si no es válido.
+     */
     private int extractId(String pathInfo, String prefix) {
         if (pathInfo == null) return 0;
         String path = pathInfo;
@@ -270,6 +345,13 @@ public class HousingGraphicServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Extrae el ID de tipo de información de vivienda (interno/externo) de la ruta.
+     * Por ejemplo, de /api/housingInfo/{planId}/type/{typeId}.
+     * 
+     * @param pathInfo Información de ruta.
+     * @return El ID del tipo extraído (por defecto retorna 2 si no se encuentra).
+     */
     private int extractHousingTypeId(String pathInfo) {
         if (pathInfo == null) return 2;
         String[] segments = pathInfo.split("/");
@@ -283,6 +365,12 @@ public class HousingGraphicServlet extends HttpServlet {
         return 2;
     }
 
+    /**
+     * Convierte un objeto genérico a un entero si es numérico o una cadena numérica.
+     * 
+     * @param obj Objeto a evaluar.
+     * @return Valor numérico entero, o 0 si no es válido.
+     */
     private int extractId(Object obj) {
         if (obj == null) return 0;
         if (obj instanceof Number) return ((Number) obj).intValue();
@@ -296,6 +384,13 @@ public class HousingGraphicServlet extends HttpServlet {
         return 0;
     }
 
+    /**
+     * Guarda el archivo subido en el almacenamiento del contexto del servlet (/storage).
+     * Genera un nombre de archivo único para evitar colisiones.
+     * 
+     * @param req Petición HTTP que contiene la parte (part) del archivo.
+     * @return El nombre del archivo guardado físicamente, o "mock_graphic.png" por defecto.
+     */
     private String saveUploadedFile(HttpServletRequest req) {
         String savedFileName = "mock_graphic.png";
         try {

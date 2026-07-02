@@ -8,14 +8,29 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Implementación de la interfaz {@link PlanFamiliarDAO} que gestiona la persistencia
+ * de planes familiares mediante consultas SQL en base de datos y memoria caché para campos adicionales.
+ */
 public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
 
     private final Map<String, Map<String, Object>> extraData;
 
+    /**
+     * Constructor de la clase.
+     *
+     * @param extraData Mapa de datos adicionales en memoria para campos no persistidos físicamente.
+     */
     public PlanFamiliarDAOImpl(Map<String, Map<String, Object>> extraData) {
         this.extraData = extraData;
     }
 
+    /**
+     * Método auxiliar privado para traducir un código de estado numérico a su equivalente textual.
+     *
+     * @param statusId Identificador del estado.
+     * @return Cadena con la descripción del estado (ej. "Creado", "En proceso", etc.).
+     */
     private String getStatusName(int statusId) {
         return switch (statusId) {
             case 1 -> "Creado";
@@ -28,6 +43,10 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
         };
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene planes familiares aplicando filtros específicos según los roles de Voluntario, Supervisor o Administrador.
+     */
     @Override
     public List<Map<String, Object>> getFamilyPlans(int roleId, int userId, int sectionalId) throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -114,6 +133,10 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Cuenta la cantidad de integrantes asociados a un plan para validar si tiene miembros.
+     */
     @Override
     public boolean hasMembers(int planId) throws SQLException {
         int count = 0;
@@ -130,6 +153,10 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
         return count > 0;
     }
 
+    /**
+     * {@inheritDoc}
+     * Realiza un conteo en base de datos para validar si el plan familiar cumple los mínimos de integrantes, riesgos y recursos.
+     */
     @Override
     public Map<String, Object> validateRequirements(int planId) throws SQLException {
         int memberCount = 0;
@@ -177,6 +204,10 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
         return valMap;
     }
 
+    /**
+     * {@inheritDoc}
+     * Busca y obtiene la información detallada del plan familiar, combinando tablas relacionales y extraData en memoria.
+     */
     @Override
     public Map<String, Object> getPlanById(int planId) throws SQLException {
         String sql = """
@@ -266,6 +297,10 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
         return item;
     }
 
+    /**
+     * {@inheritDoc}
+     * Genera estadísticas de planes familiares (pendientes, en revisión, aprobados, rechazados) para el dashboard de supervisor.
+     */
     @Override
     public Map<String, Object> getSupervisorDashboard() throws SQLException {
         int pendingCount = 0;
@@ -349,6 +384,10 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
         return data;
     }
 
+    /**
+     * {@inheritDoc}
+     * Genera datos agregados de usuarios del sistema y sus roles para el dashboard de administrador.
+     */
     @Override
     public Map<String, Object> getAdminDashboard() throws SQLException {
         int activeCount = 0;
@@ -464,6 +503,10 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
         return responseData;
     }
 
+    /**
+     * {@inheritDoc}
+     * Crea un registro de familia y el plan familiar correspondiente en una sola transacción.
+     */
     @Override
     public int createFamilyPlan(String lastNames, int userId, Map<String, Object> body) throws SQLException {
         int familyId = 0;
@@ -521,6 +564,10 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
         return planId;
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza la tabla de Familia física y el almacenamiento de datos adicionales en extraData de memoria.
+     */
     @Override
     public boolean updateIdentification(int planId, Map<String, Object> body) throws SQLException {
         String lastNames = (String) body.get("last_names");
@@ -579,6 +626,10 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
         return true;
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza el estado del plan familiar e inserta opcionalmente un registro de validación en la tabla ValidacionPlan.
+     */
     @Override
     public boolean changeStatus(int planId, int statusId, String commentary) throws SQLException {
         String sql = "UPDATE PlanFamiliar SET Estado = ? WHERE IdPlanFamiliar = ?";
@@ -602,6 +653,10 @@ public class PlanFamiliarDAOImpl implements PlanFamiliarDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza el tipo de familia/vivienda en la caché de memoria extraData.
+     */
     @Override
     public boolean changeFamilyType(int planId, int familyTypeId) throws SQLException {
         Map<String, Object> extra = extraData.computeIfAbsent("plan_" + planId, k -> new HashMap<>());

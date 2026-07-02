@@ -14,12 +14,36 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Servlet que maneja el proceso de autenticación de usuarios (Inicio de sesión).
+ * Valida las credenciales contra la base de datos, comprueba el estado activo del usuario,
+ * e inicia la sesión simulando tokens de seguridad para propósitos académicos.
+ * 
+ * Endpoint:
+ * - /api/login
+ */
 @WebServlet("/api/login")
 public class LoginServlet extends HttpServlet {
 
     private final Gson gson = new Gson();
     private final UsuarioDAO usuarioDAO = new UsuarioDAOImpl();
 
+    /**
+     * Procesa la solicitud HTTP POST para autenticar un usuario.
+     * 
+     * Cuerpo JSON recibido:
+     * - { "email": "correo@dominio.com", "password": "clave" }
+     * 
+     * Respuestas del Servidor:
+     * - 200 OK (Éxito): Retorna datos del usuario y tokens simulados.
+     * - 200 OK (Error de lógica): Mensajes sobre credenciales incorrectas, usuario inactivo o pendiente de aprobación.
+     * - 400 Bad Request: Si los datos de entrada son inválidos o nulos.
+     * - 500 Internal Server Error: Si ocurre un fallo en el servidor o base de datos.
+     * 
+     * @param req Petición HTTP conteniendo el JSON en el cuerpo.
+     * @param resp Respuesta HTTP.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         try {
@@ -99,6 +123,9 @@ public class LoginServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Clase interna DTO que representa la estructura de la solicitud de login.
+     */
     private static class LoginRequest {
         String email;
         String password;

@@ -10,9 +10,26 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.sql.Connection;
 
+/**
+ * Servlet de prueba para validar la conexión con la base de datos.
+ * 
+ * Endpoint:
+ * - /api/db-test
+ */
 @WebServlet("/api/db-test")
 public class DatabaseTestServlet extends HttpServlet {
 
+    /**
+     * Procesa solicitudes HTTP GET para verificar si la conexión a la base de datos
+     * está activa y configurada correctamente.
+     * 
+     * Retorna JSON con un mensaje de éxito ("Conexion exitosa") o un estado 500
+     * con un mensaje de error ("Error de conexion") en caso de fallo.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP con formato JSON.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws IOException {

@@ -22,6 +22,16 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 
+/**
+ * Servlet principal para gestionar la información de los planes familiares de emergencia
+ * (Family Plans) y sus recursos disponibles asociados. También provee datos estadísticos
+ * consolidados para los paneles de administración y supervisión.
+ * 
+ * Endpoints mapeados:
+ * - /api/familyPlans/*
+ * - /api/availableResources/*
+ * - /api/audits/*
+ */
 @WebServlet(urlPatterns = {
     "/api/familyPlans/*",
     "/api/availableResources/*",
@@ -38,6 +48,15 @@ public class PlanDetailsServlet extends HttpServlet {
     private final PlanFamiliarDAO planFamiliarDAO = new PlanFamiliarDAOImpl(extraData);
     private final PlanComplementarioDAO planComplementarioDAO = new PlanComplementarioDAOImpl(extraData);
 
+    /**
+     * Redirige las peticiones HTTP al método adecuado según el verbo HTTP, brindando soporte
+     * específico para peticiones HTTP PATCH.
+     * 
+     * @param req Petición HTTP recibida.
+     * @param resp Respuesta HTTP a enviar.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         if (req.getMethod().equalsIgnoreCase("PATCH")) {
@@ -47,6 +66,25 @@ public class PlanDetailsServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP GET para obtener estadísticas de planes o información de recursos.
+     * 
+     * Endpoints y Respuestas:
+     * - GET /api/audits/dashBoardSupervisor: Retorna métricas generales del supervisor (planes aprobados, en revisión, etc.).
+     * - GET /api/audits/dashBoardAdmin: Retorna métricas consolidadas del administrador por seccional.
+     * - GET /api/familyPlans: Lista los planes familiares filtrados según el rol, usuario y seccional de la sesión.
+     * - GET /api/familyPlans/check-access/{id}: Verifica acceso del usuario al plan (siempre retorna true).
+     * - GET /api/familyPlans/has-members/{id}: Determina si un plan familiar posee integrantes registrados.
+     * - GET /api/familyPlans/validate-requirements/{id}: Valida los requerimientos mínimos del plan familiar para su radicación.
+     * - GET /api/familyPlans/{id}: Obtiene los detalles completos de un plan familiar específico por su ID.
+     * - GET /api/availableResources/familyPlan/{planId}: Lista de recursos de emergencia disponibles para el plan familiar dado.
+     * - GET /api/availableResources/{id}: Detalles de un recurso disponible específico por su ID.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP en formato JSON.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String servletPath = req.getServletPath();
@@ -139,6 +177,19 @@ public class PlanDetailsServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP POST para la creación de planes familiares o la adición de recursos disponibles.
+     * Soporta cuerpos tanto JSON como multiparte (para alineación con la interfaz SPA).
+     * 
+     * Endpoints y Parámetros:
+     * - POST /api/familyPlans: Crea un plan familiar para el usuario logueado. JSON/Multiparte requerido: { "last_names": String, "user_id": int (opcional) }
+     * - POST /api/availableResources: Registra un recurso disponible. JSON requerido: { "family_plan_id": int, "resource_id": int, "description": String, "location": String, "distance": float, "phone": String }
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP en formato JSON.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("application/json");
@@ -251,6 +302,14 @@ public class PlanDetailsServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP PUT. Este servlet no soporta PUT y retorna un error 400 Bad Request.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP en formato JSON.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("application/json");
@@ -258,6 +317,22 @@ public class PlanDetailsServlet extends HttpServlet {
         ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "Ruta PUT no soportada");
     }
 
+    /**
+     * Procesa las solicitudes HTTP PATCH para actualizar estados, identificaciones o tipos de familia en los planes familiares
+     * y modificar información de recursos disponibles.
+     * 
+     * Endpoints y Parámetros:
+     * - PATCH /api/familyPlans/{id}/identify: Actualiza los campos de identificación del plan familiar (dirección, teléfono, tipo de vivienda, calidad de vivienda, etc.).
+     * - PATCH /api/familyPlans/{id}/change-status: Actualiza el estado del plan familiar (e.g., radicar, revisar, rechazar) y guarda observaciones. JSON: { "status_plan_id": int, "comentary": String }
+     * - PATCH /api/familyPlans/{id}/change-family-type: Modifica el tipo de estructura familiar. JSON: { "family_type_id": int }
+     * - PATCH /api/familyPlans/status/{id}: Cambia de manera rápida el estado del plan. JSON: { "status_plan_id": int }
+     * - PATCH /api/availableResources/{id}: Modifica los datos de un recurso de emergencia disponible existente.
+     * 
+     * @param req Petición HTTP con JSON en el cuerpo.
+     * @param resp Respuesta HTTP en formato JSON.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     protected void doPatch(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
@@ -373,6 +448,17 @@ public class PlanDetailsServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP DELETE para remover recursos de emergencia.
+     * 
+     * Endpoint:
+     * - DELETE /api/availableResources/{id}: Elimina permanentemente el recurso disponible por su ID.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP en formato JSON.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("application/json");
@@ -402,11 +488,25 @@ public class PlanDetailsServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Auxiliar para consultar y retornar los datos estadísticos consolidados para el supervisor.
+     * 
+     * @param resp Respuesta HTTP.
+     * @throws IOException Si ocurre un error de E/S.
+     * @throws SQLException Si ocurre un error de consulta SQL.
+     */
     private void responderDashboardSupervisor(HttpServletResponse resp) throws IOException, SQLException {
         Map<String, Object> data = planFamiliarDAO.getSupervisorDashboard();
         ResponseUtil.sendSuccess(resp, data);
     }
 
+    /**
+     * Auxiliar para consultar y retornar los datos estadísticos consolidados para el administrador.
+     * 
+     * @param resp Respuesta HTTP.
+     * @throws IOException Si ocurre un error de E/S.
+     * @throws SQLException Si ocurre un error de consulta SQL.
+     */
     private void responderDashboardAdmin(HttpServletResponse resp) throws IOException, SQLException {
         Map<String, Object> responseData = planFamiliarDAO.getAdminDashboard();
         ResponseUtil.sendSuccess(resp, responseData);

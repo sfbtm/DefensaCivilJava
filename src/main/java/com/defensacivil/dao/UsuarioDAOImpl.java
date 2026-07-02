@@ -8,8 +8,17 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Implementación de la interfaz {@link UsuarioDAO} que interactúa con la base de datos
+ * para realizar la autenticación de usuarios.
+ */
 public class UsuarioDAOImpl implements UsuarioDAO {
 
+    /**
+     * {@inheritDoc}
+     * Realiza una consulta SELECT filtrando por correo electrónico y compara la contraseña
+     * ingresada con la almacenada.
+     */
     @Override
     public Map<String, Object> autenticarUsuario(String email, String password) throws SQLException {
         String sql = """

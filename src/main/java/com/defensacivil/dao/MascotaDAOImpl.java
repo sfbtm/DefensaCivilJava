@@ -8,14 +8,30 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Implementación de la interfaz {@link MascotaDAO} que gestiona la persistencia
+ * de mascotas y sus vacunas utilizando consultas JDBC.
+ */
 public class MascotaDAOImpl implements MascotaDAO {
 
     private final Map<String, Map<String, Object>> extraData;
 
+    /**
+     * Constructor de la clase MascotaDAOImpl.
+     *
+     * @param extraData Mapa para el almacenamiento de datos adicionales en memoria.
+     */
     public MascotaDAOImpl(Map<String, Map<String, Object>> extraData) {
         this.extraData = extraData;
     }
 
+    /**
+     * Método auxiliar privado para mapear una fila del {@link ResultSet} a un mapa de datos de mascota.
+     *
+     * @param rs El {@link ResultSet} posicionado en la fila actual.
+     * @return Un mapa que representa a la mascota con claves estructuradas (id, name, breed, birth_date, age, etc.).
+     * @throws SQLException Si ocurre un error al leer del {@link ResultSet}.
+     */
     private Map<String, Object> mapResultSetToPet(ResultSet rs) throws SQLException {
         Map<String, Object> pet = new HashMap<>();
         pet.put("id", rs.getInt("IdMascota"));
@@ -53,6 +69,10 @@ public class MascotaDAOImpl implements MascotaDAO {
         return pet;
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene la lista de mascotas registradas en un plan familiar específico mediante un SELECT con JOINs.
+     */
     @Override
     public List<Map<String, Object>> getPetsByFamilyPlan(int planId) throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -76,6 +96,10 @@ public class MascotaDAOImpl implements MascotaDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Recupera una mascota específica por su ID mapeando los datos de la base de datos a un {@link PetDTO}.
+     */
     @Override
     public PetDTO getPetById(int petId) throws SQLException {
         String sql = """
@@ -115,6 +139,10 @@ public class MascotaDAOImpl implements MascotaDAO {
         return null;
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene una lista con todas las mascotas registradas en la base de datos.
+     */
     @Override
     public List<Map<String, Object>> getAllPets() throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -135,6 +163,10 @@ public class MascotaDAOImpl implements MascotaDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Inserta un nuevo registro de mascota y retorna la clave autogenerada.
+     */
     @Override
     public int insertPet(PetDTO dto) throws SQLException {
         String name = dto.getName();
@@ -164,6 +196,10 @@ public class MascotaDAOImpl implements MascotaDAO {
         return 0;
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza un registro de mascota existente en la base de datos con los datos del DTO.
+     */
     @Override
     public boolean updatePet(int petId, PetDTO dto) throws SQLException {
         String name = dto.getName();
@@ -185,6 +221,11 @@ public class MascotaDAOImpl implements MascotaDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Elimina una mascota de manera transaccional, eliminando primero sus vacunas
+     * registradas en la tabla intermedia MascotaVacuna para mantener la integridad referencial.
+     */
     @Override
     public boolean deletePet(int petId) throws SQLException {
         try (Connection conn = DatabaseConfig.getConnection()) {
@@ -211,6 +252,11 @@ public class MascotaDAOImpl implements MascotaDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene el listado de vacunas aplicadas a una mascota realizando un JOIN.
+     * Genera un ID de relación compuesto (petId * 100000 + vaccineId).
+     */
     @Override
     public List<Map<String, Object>> getVaccinesByPet(int petId) throws SQLException {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -240,6 +286,10 @@ public class MascotaDAOImpl implements MascotaDAO {
         return list;
     }
 
+    /**
+     * {@inheritDoc}
+     * Obtiene una vacuna registrada descodificando el ID compuesto (petId * 100000 + vacCatalogId).
+     */
     @Override
     public Map<String, Object> getVaccineById(int vaccineId) throws SQLException {
         int petId = vaccineId / 100000;
@@ -269,6 +319,11 @@ public class MascotaDAOImpl implements MascotaDAO {
         return null;
     }
 
+    /**
+     * {@inheritDoc}
+     * Registra transaccionalmente una vacuna para una mascota. Si el tipo de vacuna no existe
+     * en el catálogo (tabla Vacuna), lo crea primero, y luego inserta el registro en MascotaVacuna.
+     */
     @Override
     public int insertVaccine(Map<String, Object> body) throws SQLException {
         String name = (String) body.get("name");
@@ -332,6 +387,11 @@ public class MascotaDAOImpl implements MascotaDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Actualiza transaccionalmente la vacuna de una mascota identificada por su ID compuesto,
+     * permitiendo cambiar la fecha o el tipo de vacuna (creándolo en el catálogo si es necesario).
+     */
     @Override
     public boolean updateVaccine(int vaccineId, Map<String, Object> body) throws SQLException {
         int oldPetId = vaccineId / 100000;
@@ -390,6 +450,10 @@ public class MascotaDAOImpl implements MascotaDAO {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * Elimina el registro de aplicación de vacuna de la tabla MascotaVacuna decodificando su ID compuesto.
+     */
     @Override
     public boolean deleteVaccine(int vaccineId) throws SQLException {
         int petId = vaccineId / 100000;

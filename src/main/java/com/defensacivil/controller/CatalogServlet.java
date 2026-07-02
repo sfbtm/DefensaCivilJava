@@ -16,6 +16,18 @@ import java.sql.ResultSet;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Servlet que provee información de catálogos estáticos y dinámicos del sistema.
+ * Retorna datos en formato JSON para combos, listas de selección o mapeos de IDs a nombres.
+ * 
+ * Endpoints:
+ * - /api/statusPlans
+ * - /api/zones
+ * - /api/cities/*
+ * - /api/kinships/*
+ * - /api/bloodGroups/*
+ * - /api/animalGenders/*
+ */
 @WebServlet(urlPatterns = {
     "/api/statusPlans",
     "/api/zones",
@@ -28,6 +40,27 @@ public class CatalogServlet extends HttpServlet {
 
     private final Gson gson = new Gson();
 
+    /**
+     * Procesa las solicitudes HTTP GET para obtener catálogos diversos.
+     * 
+     * Rutas y respuestas:
+     * - GET /api/statusPlans: Lista los estados posibles de un plan familiar. Retorna JSON: { "data": [ { "id": int, "name": String } ] }
+     * - GET /api/zones: Lista de zonas (Urbana, Rural). Retorna JSON: { "data": [ { "id": int, "name": String } ] }
+     * - GET /api/cities: Lista las ciudades/municipios. Retorna JSON con lista de ciudades.
+     * - GET /api/cities/department/{deptId}: Lista las ciudades filtradas por el departamento especificado.
+     * - GET /api/kinships: Lista los tipos de parentesco. Retorna JSON con todos los parentescos.
+     * - GET /api/kinships/{id}: Obtiene un parentesco específico por su ID. Retorna JSON de un parentesco.
+     * - GET /api/bloodGroups: Lista los grupos sanguíneos. Retorna JSON con todos los grupos sanguíneos.
+     * - GET /api/bloodGroups/{id}: Obtiene un grupo sanguíneo específico por su ID. Retorna JSON de un grupo sanguíneo.
+     * - GET /api/animalGenders: Lista los géneros de animales. Retorna JSON con los géneros.
+     * - GET /api/animalGenders/{id}: Obtiene un género de animal específico por su ID (1: Macho, 2: Hembra).
+     * - GET /api/animalGenders/pet/{petId}: Obtiene el género asignado a una mascota específica consultando la base de datos.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S o al escribir la respuesta JSON.
+     */
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String servletPath = req.getServletPath();

@@ -21,6 +21,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Servlet que gestiona el registro de mascotas y sus respectivos carnés de vacunas
+ * dentro de los planes familiares de emergencia.
+ * Provee operaciones CRUD completas para mascotas y vacunas asociadas.
+ * 
+ * Endpoints mapeados:
+ * - /api/pets/*
+ * - /api/petVaccines/*
+ */
 @WebServlet(urlPatterns = {
         "/api/pets/*",
         "/api/petVaccines/*"
@@ -32,6 +41,20 @@ public class PetServlet extends HttpServlet {
     private final MascotaDAO mascotaDAO = new MascotaDAOImpl(extraData);
     private final PlanComplementarioDAO planComplementarioDAO = new PlanComplementarioDAOImpl(extraData);
 
+    /**
+     * Procesa las solicitudes HTTP GET para consultar información de mascotas o sus vacunas.
+     * 
+     * Endpoints y Respuestas:
+     * - GET /api/pets/familyPlan/{planId}: Obtiene la lista de mascotas registradas en un plan familiar.
+     * - GET /api/pets/{id}: Obtiene los detalles de una mascota específica por su ID.
+     * - GET /api/petVaccines/pet/{petId}: Obtiene la lista de vacunas asociadas a una mascota específica.
+     * - GET /api/petVaccines/{id}: Obtiene los detalles de un registro de vacuna específico por su ID.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP en formato JSON.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String servletPath = req.getServletPath();
@@ -71,6 +94,18 @@ public class PetServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP POST para crear un registro de mascota o de vacuna.
+     * 
+     * Endpoints y Parámetros:
+     * - POST /api/pets: Agrega una mascota. Cuerpo JSON representa un PetDTO.
+     * - POST /api/petVaccines: Agrega un carné de vacuna. Cuerpo JSON representa un VaccineDTO.
+     * 
+     * @param req Petición HTTP con JSON en el cuerpo.
+     * @param resp Respuesta HTTP con estado de creación y JSON confirmando la operación.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String servletPath = req.getServletPath();
@@ -107,6 +142,18 @@ public class PetServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP DELETE para eliminar una mascota o una de sus vacunas.
+     * 
+     * Endpoints:
+     * - DELETE /api/pets/{id}: Elimina una mascota de la base de datos por su ID.
+     * - DELETE /api/petVaccines/{id}: Elimina una vacuna de la base de datos por su ID.
+     * 
+     * @param req Petición HTTP con el ID del recurso en la ruta.
+     * @param resp Respuesta HTTP con JSON de confirmación.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String servletPath = req.getServletPath();
@@ -138,6 +185,14 @@ public class PetServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Redirige las peticiones HTTP al método adecuado según el verbo, soportando solicitudes HTTP PATCH.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         if (req.getMethod().equalsIgnoreCase("PATCH")) {
@@ -147,6 +202,18 @@ public class PetServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP PATCH para actualizar datos parciales de mascotas o de sus vacunas.
+     * 
+     * Endpoints:
+     * - PATCH /api/pets/{id}: Actualiza datos de la mascota. Cuerpo JSON representa un PetDTO con campos modificados.
+     * - PATCH /api/petVaccines/{id}: Actualiza datos de la vacuna. Cuerpo JSON representa un VaccineDTO con campos modificados.
+     * 
+     * @param req Petición HTTP con JSON en el cuerpo e ID en la ruta.
+     * @param resp Respuesta HTTP con JSON de confirmación.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     protected void doPatch(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String servletPath = req.getServletPath();
         String pathInfo = req.getPathInfo();
@@ -183,6 +250,14 @@ public class PetServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Extrae un identificador numérico de la información de la ruta (pathInfo) de la petición HTTP,
+     * omitiendo opcionalmente un prefijo dado.
+     * 
+     * @param pathInfo Información de ruta del servlet.
+     * @param prefix Prefijo que precede al ID en la ruta.
+     * @return ID numérico parseado, o 0 si no es válido.
+     */
     private int extractId(String pathInfo, String prefix) {
         if (pathInfo == null) return 0;
         String path = pathInfo;

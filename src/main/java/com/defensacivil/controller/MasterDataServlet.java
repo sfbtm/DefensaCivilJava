@@ -16,6 +16,26 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Servlet genérico para la gestión de datos maestros del sistema.
+ * Provee un CRUD unificado para múltiples tablas secundarias/catálogos,
+ * configurando dinámicamente nombres de columnas y mappings.
+ * 
+ * Endpoints mapeados:
+ * - /api/departments/*
+ * - /api/documentTypes/*
+ * - /api/nationalities/*
+ * - /api/sectionals/*
+ * - /api/threatTypes/*
+ * - /api/vulnerabilities/*
+ * - /api/resources/*
+ * - /api/sectors/*
+ * - /api/species/*
+ * - /api/vulnerableQuestions/*
+ * - /api/organizations/*
+ * - /api/housingQualities/*
+ * - /api/genders/*
+ */
 @WebServlet(urlPatterns = {
     "/api/departments/*",
     "/api/documentTypes/*",
@@ -36,6 +56,13 @@ public class MasterDataServlet extends HttpServlet {
     private final Gson gson = new Gson();
     private final MasterDataDAO masterDataDAO = new MasterDataDAOImpl();
 
+    /**
+     * Retorna la configuración de mapeo de base de datos correspondiente al endpoint del servlet solicitado.
+     * Asocia la ruta con la tabla, clave primaria, columna descriptiva y campos extras necesarios.
+     * 
+     * @param servletPath Ruta del endpoint solicitado.
+     * @return Objeto EntityConfig con los metadatos de la tabla, o null si la ruta no está configurada.
+     */
     private MasterDataDAO.EntityConfig getConfig(String servletPath) {
         if (servletPath.contains("departments")) return new MasterDataDAO.EntityConfig("Departamento", "IdDepartamento", "Nombre");
         if (servletPath.contains("documentTypes")) return new MasterDataDAO.EntityConfig("DocumentoTipo", "IdDocumentoTipo", "Nombre");
@@ -53,6 +80,14 @@ public class MasterDataServlet extends HttpServlet {
         return null;
     }
 
+    /**
+     * Redirige las peticiones HTTP al método adecuado, proporcionando soporte para el método PATCH.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         if (req.getMethod().equalsIgnoreCase("PATCH")) {
@@ -62,6 +97,19 @@ public class MasterDataServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP GET para obtener registros de datos maestros.
+     * Soporta consulta total, paginada o consulta individual por ID.
+     * 
+     * Endpoints y Respuestas:
+     * - GET /api/{entidad}/paginate?page={page}: Retorna una lista paginada de registros. Retorna JSON: { "data": List, "total": int }
+     * - GET /api/{entidad}: Retorna la lista completa de registros. Retorna JSON: [ { ... } ]
+     * - GET /api/{entidad}/{id}: Retorna un registro específico por ID. Retorna JSON del registro u 404 si no existe.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP en formato JSON.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         String servletPath = req.getServletPath();
@@ -110,6 +158,16 @@ public class MasterDataServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP POST para insertar nuevos registros de datos maestros.
+     * 
+     * Endpoint y Cuerpo:
+     * - POST /api/{entidad}: Crea un registro. Cuerpo JSON con las propiedades requeridas de la entidad.
+     * 
+     * @param req Petición HTTP con JSON en el cuerpo.
+     * @param resp Respuesta HTTP.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         String servletPath = req.getServletPath();
@@ -143,6 +201,17 @@ public class MasterDataServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP PATCH para actualizar campos de registros existentes o cambiar el estado activo.
+     * 
+     * Endpoints y Cuerpo:
+     * - PATCH /api/{entidad}/{id}: Modifica parcialmente un registro. Cuerpo JSON con las propiedades a actualizar.
+     * - PATCH /api/{entidad}/status/{id}: Cambia el estado de activación de un registro. Cuerpo JSON: { "is_active": boolean|int }
+     * 
+     * @param req Petición HTTP con JSON en el cuerpo y el ID en la ruta.
+     * @param resp Respuesta HTTP.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     protected void doPatch(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         String servletPath = req.getServletPath();
         MasterDataDAO.EntityConfig cfg = getConfig(servletPath);
@@ -208,6 +277,16 @@ public class MasterDataServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP DELETE para eliminar registros de datos maestros.
+     * 
+     * Endpoint:
+     * - DELETE /api/{entidad}/{id}: Elimina físicamente el registro de la base de datos por su ID.
+     * 
+     * @param req Petición HTTP con el ID en la ruta.
+     * @param resp Respuesta HTTP.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         String servletPath = req.getServletPath();

@@ -6,13 +6,34 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
+/**
+ * Filtro para el manejo del Intercambio de Recursos de Origen Cruzado (CORS).
+ * Permite configurar las cabeceras HTTP necesarias para habilitar peticiones
+ * desde diferentes dominios, así como gestionar solicitudes de tipo preflight (OPTIONS).
+ */
 @WebFilter("/*")
 public class CorsFilter implements Filter {
 
+    /**
+     * Inicializa el filtro CORS.
+     *
+     * @param filterConfig Configuración del filtro proporcionada por el contenedor de servlets.
+     * @throws ServletException Si ocurre un error durante la inicialización.
+     */
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
     }
 
+    /**
+     * Filtra las solicitudes HTTP entrantes para agregar las cabeceras de CORS correspondientes.
+     * También intercepta y responde inmediatamente a las peticiones preflight de tipo OPTIONS.
+     *
+     * @param request  La solicitud servlet entrante.
+     * @param response La respuesta servlet saliente.
+     * @param chain    La cadena de filtros a seguir.
+     * @throws IOException      Si ocurre un error de E/S al filtrar la petición.
+     * @throws ServletException Si ocurre un error en el procesamiento de la solicitud.
+     */
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
@@ -42,6 +63,9 @@ public class CorsFilter implements Filter {
         chain.doFilter(request, response);
     }
 
+    /**
+     * Destruye el filtro, liberando los recursos asignados en el ciclo de vida del filtro.
+     */
     @Override
     public void destroy() {
     }

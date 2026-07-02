@@ -19,6 +19,23 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Servlet que gestiona la administración de usuarios del sistema (Voluntarios, Supervisores y Administradores).
+ * Provee endpoints públicos para el catálogo de tipos de documento, géneros, seccionales y organizaciones,
+ * y endpoints protegidos para solicitudes de aprobación, asignación de roles, cambio de estado y eliminación.
+ * 
+ * Endpoints mapeados:
+ * - /api/users/*
+ * - /api/register/*
+ * - /api/register
+ * - /api/public/document-types/*
+ * - /api/public/document-types
+ * - /api/public/genders/*
+ * - /api/public/genders
+ * - /api/public/sectionals/*
+ * - /api/public/sectionals
+ * - /api/public/organizations/sectional/*
+ */
 @WebServlet(urlPatterns = {
     "/api/users/*",
     "/api/register/*",
@@ -39,6 +56,14 @@ public class UserServlet extends HttpServlet {
     public static int loggedInSectionalId = 1;
     public static int loggedInRoleId = 1;
 
+    /**
+     * Redirige las peticiones HTTP al método correspondiente según el verbo, soportando solicitudes HTTP PATCH.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         if (req.getMethod().equalsIgnoreCase("PATCH")) {
@@ -48,6 +73,24 @@ public class UserServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP GET para obtener listados de usuarios, solicitudes de registro o catálogos públicos.
+     * 
+     * Endpoints y Respuestas:
+     * - GET /api/public/document-types: Lista los tipos de documento en formato JSON.
+     * - GET /api/public/genders: Lista los géneros de personas registrados en formato JSON.
+     * - GET /api/public/sectionals: Lista las seccionales del sistema.
+     * - GET /api/public/organizations/sectional/{sectionalId}: Lista las organizaciones correspondientes a la seccional dada.
+     * - GET /api/users/requestsAdmins: Lista las solicitudes pendientes (Activo = 3) de usuarios con rol de Voluntario (para administrador).
+     * - GET /api/users/requests/supervisors: Lista las solicitudes pendientes (Activo = 3) de usuarios con rol de Supervisor de la seccional del usuario logueado.
+     * - GET /api/users/userForSupervisor: Lista los usuarios activos e inactivos con rol de Voluntario bajo la misma seccional.
+     * - GET /api/users/userForAdmin: Lista todos los usuarios activos e inactivos (excluyendo administradores) para el panel de administración.
+     * - GET /api/users/{id}: Obtiene la ficha detallada de un usuario específico por su ID.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP en formato JSON.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         resp.setContentType("application/json");
@@ -461,6 +504,17 @@ public class UserServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP POST, principalmente para el registro de nuevos usuarios en el sistema.
+     * 
+     * Endpoint y Cuerpo JSON:
+     * - POST /api/register: Registra una nueva cuenta de usuario en estado pendiente de aprobación (Activo = 3).
+     *   Cuerpo JSON representando un RegisterRequest.
+     * 
+     * @param req Petición HTTP conteniendo los datos de registro en formato JSON.
+     * @param resp Respuesta HTTP indicando éxito o error.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         resp.setContentType("application/json");
@@ -558,6 +612,9 @@ public class UserServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Clase interna DTO para recibir los parámetros de registro de un usuario.
+     */
     private static class RegisterRequest {
         String names;
         String last_names;
@@ -571,6 +628,17 @@ public class UserServlet extends HttpServlet {
         String password;
     }
 
+    /**
+     * Procesa las solicitudes HTTP PATCH para actualizar estados de cuentas de usuarios o reasignar roles.
+     * 
+     * Endpoints y Parámetros:
+     * - PATCH /api/users/role/{id}: Cambia el rol de un usuario. Cuerpo JSON: { "role": String ("Administrador"|"Supervisor"|"Voluntario") }
+     * - PATCH /api/users/{id}/change-status: Cambia el estado de actividad del usuario. Cuerpo JSON: { "state_user_id": int (1: Activo, 0: Inactivo, 2: Desactivado, 3: Petición) }
+     * 
+     * @param req Petición HTTP con JSON en el cuerpo.
+     * @param resp Respuesta HTTP.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     protected void doPatch(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
@@ -664,6 +732,16 @@ public class UserServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP DELETE para eliminar cuentas de usuario.
+     * 
+     * Endpoint:
+     * - DELETE /api/users/{id}: Elimina permanentemente la cuenta de usuario identificada por el ID proporcionado.
+     * 
+     * @param req Petición HTTP con el ID en la ruta.
+     * @param resp Respuesta HTTP en formato JSON.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         resp.setContentType("application/json");

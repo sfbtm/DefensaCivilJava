@@ -17,6 +17,15 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Servlet que gestiona los integrantes de los planes familiares y sus condiciones especiales de salud (afecciones).
+ * Provee operaciones para listar, agregar, actualizar y eliminar integrantes y sus afecciones.
+ * 
+ * Endpoints mapeados:
+ * - /api/members/*
+ * - /api/conditionMembers/*
+ * - /api/familyMembers
+ */
 @WebServlet(urlPatterns = {
         "/api/members/*",
         "/api/conditionMembers/*",
@@ -29,6 +38,21 @@ public class MemberServlet extends HttpServlet {
     private static final Map<String, Map<String, Object>> extraData = new ConcurrentHashMap<>();
     private final IntegranteDAO integranteDAO = new IntegranteDAOImpl(extraData);
 
+    /**
+     * Procesa las solicitudes HTTP GET para obtener información sobre integrantes y afecciones médicas.
+     * 
+     * Endpoints y Respuestas:
+     * - GET /api/familyMembers: Obtiene la lista completa de todos los integrantes de familias registrados en el sistema. Retorna success con List&lt;MemberDTO&gt;.
+     * - GET /api/conditionMembers/member/{memberId}: Obtiene la lista de afecciones médicas asociadas a un integrante. Retorna success con lista de afecciones.
+     * - GET /api/conditionMembers/{id}: Obtiene los detalles de una afección médica específica por su ID.
+     * - GET /api/members/familyPlan/select/{planId}: Obtiene una lista simplificada de integrantes listos para selección en un plan familiar.
+     * - GET /api/members/familyPlan/{planId}: Obtiene la lista completa de integrantes asociados a un plan familiar.
+     * - GET /api/members/{id}: Obtiene los detalles de un integrante específico por su ID.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP en formato JSON.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         resp.setContentType("application/json");
@@ -73,6 +97,17 @@ public class MemberServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP POST para crear nuevos integrantes o registrar afecciones de salud.
+     * 
+     * Endpoints y Parámetros:
+     * - POST /api/conditionMembers: Registra una nueva afección. Cuerpo JSON: { "member_id": int, "name": String, "dose": String }
+     * - POST /api/members/{familyPlanId}: Registra un nuevo integrante en el plan familiar. Cuerpo JSON representando un MemberDTO.
+     * 
+     * @param req Petición HTTP con JSON en el cuerpo.
+     * @param resp Respuesta HTTP con estado de creación y JSON de éxito.
+     * @throws IOException Si ocurre un error de E/S o al deserializar el cuerpo.
+     */
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         resp.setContentType("application/json");
@@ -113,6 +148,17 @@ public class MemberServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP PUT para actualizar información de integrantes existentes o sus afecciones.
+     * 
+     * Endpoints y Parámetros:
+     * - PUT /api/members/{id}: Actualiza los datos de un integrante. Cuerpo JSON representando un MemberDTO.
+     * - PUT /api/conditionMembers/{id}: Actualiza los datos de una afección de salud. Cuerpo JSON: { "name": String, "dose": String }
+     * 
+     * @param req Petición HTTP con JSON en el cuerpo e ID en la ruta.
+     * @param resp Respuesta HTTP con JSON de confirmación.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         String servletPath = req.getServletPath();
@@ -146,6 +192,17 @@ public class MemberServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP DELETE para eliminar integrantes o afecciones médicas.
+     * 
+     * Endpoints:
+     * - DELETE /api/members/{id}: Elimina un integrante por su ID de la base de datos.
+     * - DELETE /api/conditionMembers/{id}: Elimina una afección médica por su ID.
+     * 
+     * @param req Petición HTTP con ID del recurso en la ruta.
+     * @param resp Respuesta HTTP con JSON de confirmación.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         String servletPath = req.getServletPath();

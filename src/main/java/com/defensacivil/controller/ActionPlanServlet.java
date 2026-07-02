@@ -19,6 +19,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Servlet que gestiona los planes de acción y las acciones asociadas a ellos.
+ * Soporta operaciones para consultar, crear, actualizar y eliminar planes de acción
+ * y acciones asociadas a través de endpoints REST.
+ * 
+ * Mapea las siguientes rutas:
+ * - /api/actionPlans/*
+ * - /api/actionPlanActions/*
+ */
 @WebServlet(urlPatterns = {
     "/api/actionPlans/*",
     "/api/actionPlanActions/*"
@@ -29,6 +38,15 @@ public class ActionPlanServlet extends HttpServlet {
     private static final Map<String, Map<String, Object>> extraData = new ConcurrentHashMap<>();
     private final PlanComplementarioDAO planComplementarioDAO = new PlanComplementarioDAOImpl(extraData);
 
+    /**
+     * Controla el flujo de las peticiones HTTP redirigiéndolas al método correspondiente.
+     * Permite el soporte para el método HTTP PATCH.
+     * 
+     * @param req Petición HTTP recibida.
+     * @param resp Respuesta HTTP a enviar.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         if (req.getMethod().equalsIgnoreCase("PATCH")) {
@@ -38,6 +56,20 @@ public class ActionPlanServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP GET para obtener información de planes de acción y sus acciones.
+     * 
+     * Endpoints y Respuestas:
+     * - GET /api/actionPlans/familyPlan/boolean/{planId}: Determina si un plan familiar posee un plan de acción. Retorna success: boolean.
+     * - GET /api/actionPlans/familyPlan/{planId}: Recupera el plan de acción de un plan familiar. Retorna success: ActionPlanDTO o error 404.
+     * - GET /api/actionPlanActions/actionPlan/{actionPlanId}: Recupera la lista de acciones de un plan de acción. Retorna success: List&lt;ActionDTO&gt;.
+     * - GET /api/actionPlanActions/{id}: Recupera los detalles de una acción específica por su ID. Retorna success: ActionDTO o error 404.
+     * 
+     * @param req Petición HTTP.
+     * @param resp Respuesta HTTP.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String servletPath = req.getServletPath();
@@ -89,6 +121,18 @@ public class ActionPlanServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP POST para crear nuevos planes de acción o acciones asociadas.
+     * 
+     * Endpoints y Parámetros en JSON:
+     * - POST /api/actionPlans: Crea un nuevo plan de acción. JSON requerido: { "family_plan_id": int, "coordinator_id": int }
+     * - POST /api/actionPlanActions: Registra una nueva acción. JSON requerido: { "action_plan_id": int, "member_id": int, "description": String, "action_type_id": int }
+     * 
+     * @param req Petición HTTP con el JSON en el cuerpo.
+     * @param resp Respuesta HTTP.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("application/json");
@@ -134,6 +178,17 @@ public class ActionPlanServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP PATCH para actualizar una acción existente.
+     * 
+     * Endpoint y Parámetros en JSON:
+     * - PATCH /api/actionPlanActions/{id}: Modifica una acción. JSON requerido: { "member_id": int, "description": String }
+     * 
+     * @param req Petición HTTP con el JSON en el cuerpo.
+     * @param resp Respuesta HTTP.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     protected void doPatch(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
@@ -165,6 +220,17 @@ public class ActionPlanServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Procesa las solicitudes HTTP DELETE para eliminar acciones.
+     * 
+     * Endpoint:
+     * - DELETE /api/actionPlanActions/{id}: Elimina físicamente la acción identificada por el ID proporcionado.
+     * 
+     * @param req Petición HTTP con el ID de la acción en la ruta.
+     * @param resp Respuesta HTTP.
+     * @throws ServletException Si ocurre un error en el servlet.
+     * @throws IOException Si ocurre un error de E/S.
+     */
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("application/json");
@@ -192,6 +258,14 @@ public class ActionPlanServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Extrae un identificador numérico de la información de la ruta (pathInfo) de la petición HTTP,
+     * opcionalmente omitiendo un prefijo dado.
+     * 
+     * @param pathInfo Información de ruta del servlet.
+     * @param prefix Prefijo que precede al ID en la ruta.
+     * @return El ID numérico parseado, o 0 en caso de error de formato o nulidad.
+     */
     private int extractId(String pathInfo, String prefix) {
         if (pathInfo == null) return 0;
         String path = pathInfo;
@@ -212,6 +286,13 @@ public class ActionPlanServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Extrae un identificador numérico de un objeto de tipo genérico, el cual puede ser
+     * numérico o una cadena que represente un entero.
+     * 
+     * @param obj Objeto que representa el ID.
+     * @return El ID numérico parseado, o 0 en caso de error de formato o nulidad.
+     */
     private int extractId(Object obj) {
         if (obj == null) return 0;
         if (obj instanceof Number) return ((Number) obj).intValue();
