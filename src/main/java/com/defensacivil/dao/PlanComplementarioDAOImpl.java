@@ -635,11 +635,10 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
     // --- PET VACCINES ---
 
     /**
-     * {@inheritDoc}
-     * Recupera el historial de vacunas de la mascota, calculando y asignando un ID compuesto de relación.
+     * Recupera el historial de vacunas de la mascota.
      *
      * @param petId Identificador único de la mascota.
-     * @return Una lista de DTOs {@link VaccineDTO} con las vacunas de la mascota.
+     * @return Una lista de DTOs con la información de vacunas.
      * @throws SQLException Si ocurre un error de base de datos durante la lectura.
      */
     @Override
@@ -648,7 +647,7 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         List<VaccineDTO> list = new ArrayList<>();
         
         // Sentencia SQL para consultar las vacunas aplicadas a la mascota usando un JOIN
-        String sql = "SELECT mv.IdVacuna, v.Nombre, mv.FechaAplicacion " +
+        String sql = "SELECT mv.IdMascotaVacuna, mv.IdVacuna, v.Nombre, mv.FechaAplicacion " +
                      "FROM MascotaVacuna mv " +
                      "JOIN Vacuna v ON mv.IdVacuna = v.IdVacuna " +
                      "WHERE mv.IdMascota = ?";
@@ -664,15 +663,12 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
             try (ResultSet rs = ps.executeQuery()) {
                 // Iterar a través de los resultados encontrados
                 while (rs.next()) {
-                    int vacId = rs.getInt("IdVacuna");
+                    int relationId = rs.getInt("IdMascotaVacuna");
                     Date fechaDate = rs.getDate("FechaAplicacion");
                     
                     // Formatear la fecha a cadena, utilizando la fecha actual como fallback
                     String dateVal = fechaDate != null ? fechaDate.toString() : java.time.LocalDate.now().toString();
-
-                    // Generar un identificador de relación compuesto (petId * 100000 + vacId)
-                    int relationId = petId * 100000 + vacId;
-
+ 
                     // Crear y mapear los campos en el DTO de Vacuna
                     VaccineDTO dto = new VaccineDTO();
                     dto.setId(relationId);
@@ -688,52 +684,45 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         // Retornar la lista de vacunas mapeadas
         return list;
     }
-
+ 
     /**
      * {@inheritDoc}
-     * Obtiene una vacuna específica descodificando su ID de relación compuesto.
+     * Obtiene una vacuna específica por su ID físico único (IdMascotaVacuna).
      *
-     * @param vaccineId Identificador compuesto de la relación vacuna-mascota (petId * 100000 + vacId).
+     * @param vaccineId Identificador físico de la relación vacuna-mascota.
      * @return El DTO {@link VaccineDTO} con la información de la vacuna, o null si no se encuentra.
      * @throws SQLException Si ocurre un error de base de datos durante la lectura.
      */
     @Override
     public VaccineDTO getVaccineById(int vaccineId) throws SQLException {
-        // Descodificar el ID compuesto para obtener los identificadores físicos correspondientes
-        int petId = vaccineId / 100000;
-        int vacCatalogId = vaccineId % 100000;
-        
         // Sentencia SQL parametrizada para buscar un registro único de vacuna de mascota
-        String sql = "SELECT mv.IdVacuna, v.Nombre, mv.FechaAplicacion " +
+        String sql = "SELECT mv.IdMascotaVacuna, mv.IdMascota, v.Nombre, mv.FechaAplicacion " +
                      "FROM MascotaVacuna mv " +
                      "JOIN Vacuna v ON mv.IdVacuna = v.IdVacuna " +
-                     "WHERE mv.IdMascota = ? AND mv.IdVacuna = ?";
+                     "WHERE mv.IdMascotaVacuna = ?";
         
-        // Abrir conexión y preparar la sentencia de búsqueda por clave compuesta
+        // Abrir conexión y preparar la sentencia de búsqueda por ID único
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             
-            // Asignar parámetros decodificados de Mascota y Vacuna Catalogo
-            ps.setInt(1, petId);
-            ps.setInt(2, vacCatalogId);
+            ps.setInt(1, vaccineId);
             
             // Ejecutar la consulta y procesar el ResultSet
             try (ResultSet rs = ps.executeQuery()) {
                 // Si existe el registro de relación vacuna-mascota
                 if (rs.next()) {
+                    int petId = rs.getInt("IdMascota");
                     Date fechaDate = rs.getDate("FechaAplicacion");
                     
                     // Formatear la fecha a cadena, utilizando la fecha actual como fallback
                     String dateVal = fechaDate != null ? fechaDate.toString() : java.time.LocalDate.now().toString();
-
+ 
                     // Instanciar y llenar el DTO resultante
                     VaccineDTO dto = new VaccineDTO();
                     dto.setId(vaccineId);
                     dto.setName(rs.getString("Nombre"));
                     dto.setPet_id(petId);
                     dto.setDate(dateVal);
-                    
-                    // Retornar el DTO mapeado
                     return dto;
                 }
             }
@@ -816,7 +805,7 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
                 String insertLinkSql = "INSERT INTO MascotaVacuna (IdMascota, IdVacuna, FechaAplicacion) VALUES (?, ?, ?)";
                 
                 // Preparar la inserción de la relación vacuna-mascota
-                try (PreparedStatement ps = conn.prepareStatement(insertLinkSql)) {
+                try (PreparedStatement ps = conn.prepareStatement(insertLinkSql, Statement.RETURN_GENERATED_KEYS)) {
                     ps.setInt(1, petId);
                     ps.setInt(2, vaccineCatalogId);
                     
@@ -826,11 +815,17 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
                     
                     // Si el registro se creó exitosamente en la relación MascotaVacuna
                     if (rows > 0) {
+                        int generatedKey = 0;
+                        try (ResultSet rs = ps.getGeneratedKeys()) {
+                            if (rs.next()) {
+                                generatedKey = rs.getInt(1);
+                            }
+                        }
                         // Confirmar los cambios transaccionales en la base de datos
                         conn.commit();
                         
-                        // Retornar el identificador compuesto de la relación
-                        return petId * 100000 + vaccineCatalogId;
+                        // Retornar el identificador físico generado
+                        return generatedKey;
                     }
                 }
                 
@@ -848,23 +843,11 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     * Actualiza transaccionalmente la vacuna asignada a la mascota descodificando su ID compuesto.
-     *
-     * @param vaccineId Identificador compuesto de la relación original a actualizar.
-     * @param dto El DTO {@link VaccineDTO} con la nueva información de vacuna.
-     * @return true si la actualización transaccional fue exitosa; false en caso contrario.
-     * @throws SQLException Si ocurre un error de base de datos durante las operaciones.
-     */
     @Override
     public boolean updateVaccine(int vaccineId, VaccineDTO dto) throws SQLException {
-        // Descodificar el ID compuesto original para obtener mascota y vacuna catálogo
-        int oldPetId = vaccineId / 100000;
-        int oldVacCatalogId = vaccineId % 100000;
         String name = dto.getName();
         String dateStr = dto.getDate();
-
+ 
         // Obtener conexión para administrar la transacción de actualización de forma explícita
         try (Connection conn = DatabaseConfig.getConnection()) {
             // Desactivar auto commit
@@ -915,16 +898,15 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
                     conn.rollback();
                     return false;
                 }
-
+ 
                 // 2. Modificar la relación en MascotaVacuna
-                String sql = "UPDATE MascotaVacuna SET IdVacuna = ?, FechaAplicacion = ? WHERE IdMascota = ? AND IdVacuna = ?";
+                String sql = "UPDATE MascotaVacuna SET IdVacuna = ?, FechaAplicacion = ? WHERE IdMascotaVacuna = ?";
                 
                 // Preparar y ejecutar la actualización del registro en la relación MascotaVacuna
                 try (PreparedStatement ps = conn.prepareStatement(sql)) {
                     ps.setInt(1, newVaccineCatalogId);
                     ps.setDate(2, dateStr != null && !dateStr.isEmpty() ? Date.valueOf(dateStr) : Date.valueOf(java.time.LocalDate.now()));
-                    ps.setInt(3, oldPetId);
-                    ps.setInt(4, oldVacCatalogId);
+                    ps.setInt(3, vaccineId);
                     int rows = ps.executeUpdate();
                     
                     // Confirmar transacción
@@ -943,31 +925,25 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
             }
         }
     }
-
+ 
     /**
      * {@inheritDoc}
-     * Elimina el registro de aplicación de vacuna decodificando el ID compuesto.
+     * Elimina el registro de aplicación de vacuna por su ID físico único.
      *
-     * @param vaccineId Identificador compuesto de la vacuna a eliminar.
+     * @param vaccineId Identificador físico de la relación vacuna-mascota.
      * @return true si la eliminación del registro de relación fue exitosa; false en caso contrario.
      * @throws SQLException Si ocurre un error al ejecutar la sentencia SQL.
      */
     @Override
     public boolean deleteVaccine(int vaccineId) throws SQLException {
-        // Descodificar el ID compuesto para obtener mascota y vacuna catálogo físicos
-        int petId = vaccineId / 100000;
-        int vacCatalogId = vaccineId % 100000;
-        
         // Sentencia SQL parametrizada de borrado
-        String sql = "DELETE FROM MascotaVacuna WHERE IdMascota = ? AND IdVacuna = ?";
+        String sql = "DELETE FROM MascotaVacuna WHERE IdMascotaVacuna = ?";
         
         // Abrir conexión y preparar la eliminación física
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             
-            // Asignar parámetros decodificados de la relación compuesta
-            ps.setInt(1, petId);
-            ps.setInt(2, vacCatalogId);
+            ps.setInt(1, vaccineId);
             
             // Retornar true si el DELETE afectó filas
             return ps.executeUpdate() > 0;
@@ -1228,17 +1204,8 @@ public class PlanComplementarioDAOImpl implements PlanComplementarioDAO {
             // Asignar el parámetro del ID de recurso a eliminar
             ps.setInt(1, idVal);
             
-            // Ejecutar eliminación física y almacenar resultado
-            boolean deleted = ps.executeUpdate() > 0;
-            
-            // Si el registro fue eliminado correctamente de la base de datos relacional
-            if (deleted) {
-                // Eliminar la entrada correspondiente de la memoria caché
-                extraData.remove("resource_" + idVal);
-            }
-            
             // Retornar el resultado de la operación de borrado
-            return deleted;
+            return ps.executeUpdate() > 0;
         }
     }
 }

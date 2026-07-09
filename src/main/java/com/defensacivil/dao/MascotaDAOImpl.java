@@ -313,8 +313,7 @@ public class MascotaDAOImpl implements MascotaDAO {
     /**
      * {@inheritDoc}
      * Obtiene el listado de vacunas aplicadas a una mascota realizando un JOIN.
-     * Genera un ID de relación compuesto (petId * 100000 + vaccineId).
-     */
+     **/
     @Override
     public List<Map<String, Object>> getVaccinesByPet(int petId) throws SQLException {
         // Inicializar la lista de mapas para las vacunas de la mascota

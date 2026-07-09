@@ -339,8 +339,6 @@ public class IntegranteDAOImpl implements IntegranteDAO {
                 }
                 // Si todo fue exitoso, confirmar los cambios de la transacción en la base de datos
                 conn.commit();
-                // Remover la información adicional del integrante de la memoria caché virtual
-                extraData.remove("member_" + memberId);
                 // Retornar verdadero si se eliminó al menos una fila del integrante
                 return affectedRows > 0;
             } catch (SQLException e) {

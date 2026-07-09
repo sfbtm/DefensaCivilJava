@@ -142,4 +142,31 @@ public interface VulnerabilidadDAO {
      * @throws SQLException Si ocurre un error de base de datos al buscar, insertar o actualizar la respuesta.
      */
     boolean saveOrUpdateVulnerableTestAnswer(int planId, int questionId, boolean answer) throws SQLException;
+
+    // === Acciones de Reducción de Riesgo (AccionReduccion) ===
+
+    /**
+     * Obtiene la lista de acciones de reducción asociadas a un factor de riesgo.
+     */
+    List<Map<String, Object>> getReductionActionsByRiskFactor(int riskId) throws SQLException;
+
+    /**
+     * Obtiene el detalle de una acción de reducción individual por su ID.
+     */
+    Map<String, Object> getReductionActionById(int idVal) throws SQLException;
+
+    /**
+     * Agrega una nueva acción de reducción de riesgo.
+     */
+    int addReductionAction(Map<String, Object> body) throws SQLException;
+
+    /**
+     * Actualiza una acción de reducción de riesgo existente.
+     */
+    boolean updateReductionAction(int idVal, Map<String, Object> body) throws SQLException;
+
+    /**
+     * Elimina una acción de reducción de riesgo existente.
+     */
+    boolean deleteReductionAction(int idVal) throws SQLException;
 }

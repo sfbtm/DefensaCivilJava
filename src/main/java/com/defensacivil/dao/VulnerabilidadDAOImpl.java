@@ -714,11 +714,164 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
                     insertPs.setInt(2, planId);
                     insertPs.setBoolean(3, answer);
                     int rows = insertPs.executeUpdate();
-                    
-                    // Retornar verdadero si se insertó con éxito
                     return rows > 0;
                 }
             }
+        }
+    }
+
+    // === Acciones de Reducción de Riesgo (AccionReduccion) ===
+
+    @Override
+    public List<Map<String, Object>> getReductionActionsByRiskFactor(int riskId) throws SQLException {
+        List<Map<String, Object>> list = new ArrayList<>();
+        String sql = "SELECT ar.IdAccionReduccion, ar.Accion, ar.IdResponsable, ar.FechaFin, i.Nombre, i.Apellido " +
+                     "FROM AccionReduccion ar " +
+                     "LEFT JOIN Integrante i ON ar.IdResponsable = i.IdIntegrante " +
+                     "WHERE ar.IdFactorRiesgo = ?";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, riskId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> item = new HashMap<>();
+                    int idVal = rs.getInt("IdAccionReduccion");
+                    item.put("id", idVal);
+                    item.put("action", rs.getString("Accion") != null ? rs.getString("Accion") : "");
+                    item.put("member_id", rs.getInt("IdResponsable") > 0 ? rs.getInt("IdResponsable") : null);
+                    
+                    String names = rs.getString("Nombre") != null ? rs.getString("Nombre") : "Encargado";
+                    String lastNames = rs.getString("Apellido") != null ? rs.getString("Apellido") : "";
+                    item.put("member", Map.of("names", names, "last_names", lastNames));
+                    
+                    Date endDate = rs.getDate("FechaFin");
+                    item.put("end_date", endDate != null ? endDate.toString() : "");
+                    list.add(item);
+                }
+            }
+        }
+        return list;
+    }
+
+    @Override
+    public Map<String, Object> getReductionActionById(int idVal) throws SQLException {
+        Map<String, Object> item = new HashMap<>();
+        String sql = "SELECT ar.IdAccionReduccion, ar.Accion, ar.IdResponsable, ar.FechaFin, i.Nombre, i.Apellido " +
+                     "FROM AccionReduccion ar " +
+                     "LEFT JOIN Integrante i ON ar.IdResponsable = i.IdIntegrante " +
+                     "WHERE ar.IdAccionReduccion = ?";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, idVal);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    item.put("id", rs.getInt("IdAccionReduccion"));
+                    item.put("action", rs.getString("Accion") != null ? rs.getString("Accion") : "");
+                    item.put("member_id", rs.getInt("IdResponsable") > 0 ? rs.getInt("IdResponsable") : null);
+                    
+                    String names = rs.getString("Nombre") != null ? rs.getString("Nombre") : "Encargado";
+                    String lastNames = rs.getString("Apellido") != null ? rs.getString("Apellido") : "";
+                    item.put("member", Map.of("names", names, "last_names", lastNames));
+                    
+                    Date endDate = rs.getDate("FechaFin");
+                    item.put("end_date", endDate != null ? endDate.toString() : "");
+                }
+            }
+        }
+        return item;
+    }
+
+    @Override
+    public int addReductionAction(Map<String, Object> body) throws SQLException {
+        Object riskIdObj = body.get("risk_factor_id");
+        int riskId = 1;
+        if (riskIdObj instanceof Number) {
+            riskId = ((Number) riskIdObj).intValue();
+        } else if (riskIdObj instanceof String) {
+            riskId = Integer.parseInt((String) riskIdObj);
+        }
+
+        Object memberIdObj = body.get("member_id");
+        Integer memberId = null;
+        if (memberIdObj instanceof Number) {
+            memberId = ((Number) memberIdObj).intValue();
+        } else if (memberIdObj instanceof String && !((String) memberIdObj).trim().isEmpty()) {
+            memberId = Integer.parseInt((String) memberIdObj);
+        }
+
+        String action = (String) body.get("action");
+        String endDateStr = (String) body.get("end_date");
+        Date endDate = null;
+        if (endDateStr != null && !endDateStr.trim().isEmpty()) {
+            try {
+                endDate = Date.valueOf(endDateStr.trim());
+            } catch (Exception ignored) {}
+        }
+
+        String sql = "INSERT INTO AccionReduccion (IdFactorRiesgo, IdResponsable, Accion, FechaFin) VALUES (?, ?, ?, ?)";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setInt(1, riskId);
+            if (memberId != null) {
+                ps.setInt(2, memberId);
+            } else {
+                ps.setNull(2, java.sql.Types.INTEGER);
+            }
+            ps.setString(3, action != null ? action : "");
+            ps.setDate(4, endDate);
+            
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        }
+        return 0;
+    }
+
+    @Override
+    public boolean updateReductionAction(int idVal, Map<String, Object> body) throws SQLException {
+        Object memberIdObj = body.get("member_id");
+        Integer memberId = null;
+        if (memberIdObj instanceof Number) {
+            memberId = ((Number) memberIdObj).intValue();
+        } else if (memberIdObj instanceof String && !((String) memberIdObj).trim().isEmpty()) {
+            memberId = Integer.parseInt((String) memberIdObj);
+        }
+
+        String action = (String) body.get("action");
+        String endDateStr = (String) body.get("end_date");
+        Date endDate = null;
+        if (endDateStr != null && !endDateStr.trim().isEmpty()) {
+            try {
+                endDate = Date.valueOf(endDateStr.trim());
+            } catch (Exception ignored) {}
+        }
+
+        String sql = "UPDATE AccionReduccion SET IdResponsable = ?, Accion = ?, FechaFin = ? WHERE IdAccionReduccion = ?";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (memberId != null) {
+                ps.setInt(1, memberId);
+            } else {
+                ps.setNull(1, java.sql.Types.INTEGER);
+            }
+            ps.setString(2, action != null ? action : "");
+            ps.setDate(3, endDate);
+            ps.setInt(4, idVal);
+            
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    @Override
+    public boolean deleteReductionAction(int idVal) throws SQLException {
+        String sql = "DELETE FROM AccionReduccion WHERE IdAccionReduccion = ?";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, idVal);
+            return ps.executeUpdate() > 0;
         }
     }
 }
