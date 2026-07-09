@@ -6,19 +6,28 @@ package com.defensacivil.dto;
  * género, plan familiar asociado y edad de la mascota.
  */
 public class PetDTO {
+    // Identificador único de la mascota
     private int id;
+    // Nombre de la mascota
     private String name;
+    // Raza de la mascota (ej. Criollo, Labrador, Siamés)
     private String breed;
+    // Fecha de nacimiento de la mascota (formato AAAA-MM-DD)
     private String birthDate;
+    // ID correspondiente a la especie del animal (ej. Perro, Gato)
     private int speciesId;
+    // ID correspondiente al género o sexo del animal
     private int animalGenderId;
+    // ID del plan familiar al que pertenece la mascota
     private int familyPlanId;
+    // Edad calculada de la mascota en años
     private int age;
 
     /**
      * Constructor por defecto de PetDTO.
      */
     public PetDTO() {
+        // Bloque del constructor por defecto de PetDTO
     }
 
     /**
@@ -35,6 +44,7 @@ public class PetDTO {
      */
     public PetDTO(int id, String name, String breed, String birthDate, int speciesId, int animalGenderId,
                   int familyPlanId, int age) {
+        // Bloque del constructor parametrizado de PetDTO: inicializar todos los atributos de la mascota
         this.id = id;
         this.name = name;
         this.breed = breed;
@@ -51,6 +61,7 @@ public class PetDTO {
      * @return El identificador único de la mascota.
      */
     public int getId() {
+        // Bloque getter para obtener el identificador de la mascota
         return id;
     }
 
@@ -60,6 +71,7 @@ public class PetDTO {
      * @param id El identificador único a establecer.
      */
     public void setId(int id) {
+        // Bloque setter para establecer el identificador de la mascota
         this.id = id;
     }
 
@@ -69,6 +81,7 @@ public class PetDTO {
      * @return El nombre de la mascota.
      */
     public String getName() {
+        // Bloque getter para obtener el nombre de la mascota
         return name;
     }
 
@@ -78,6 +91,7 @@ public class PetDTO {
      * @param name El nombre de la mascota a establecer.
      */
     public void setName(String name) {
+        // Bloque setter para establecer el nombre de la mascota
         this.name = name;
     }
 
@@ -87,6 +101,7 @@ public class PetDTO {
      * @return La raza de la mascota.
      */
     public String getBreed() {
+        // Bloque getter para obtener la raza de la mascota
         return breed;
     }
 
@@ -96,6 +111,7 @@ public class PetDTO {
      * @param breed La raza a establecer.
      */
     public void setBreed(String breed) {
+        // Bloque setter para establecer la raza de la mascota
         this.breed = breed;
     }
 
@@ -105,6 +121,7 @@ public class PetDTO {
      * @return La fecha de nacimiento de la mascota.
      */
     public String getBirthDate() {
+        // Bloque getter para obtener la fecha de nacimiento de la mascota
         return birthDate;
     }
 
@@ -114,6 +131,7 @@ public class PetDTO {
      * @param birthDate La fecha de nacimiento a establecer.
      */
     public void setBirthDate(String birthDate) {
+        // Bloque setter para establecer la fecha de nacimiento de la mascota
         this.birthDate = birthDate;
     }
 
@@ -123,6 +141,7 @@ public class PetDTO {
      * @return El identificador de la especie.
      */
     public int getSpeciesId() {
+        // Bloque getter para obtener el identificador de la especie de la mascota
         return speciesId;
     }
 
@@ -132,6 +151,7 @@ public class PetDTO {
      * @param speciesId El identificador de la especie a establecer.
      */
     public void setSpeciesId(int speciesId) {
+        // Bloque setter para establecer el identificador de la especie de la mascota
         this.speciesId = speciesId;
     }
 
@@ -141,6 +161,7 @@ public class PetDTO {
      * @return El identificador del género de la mascota.
      */
     public int getAnimalGenderId() {
+        // Bloque getter para obtener el identificador del género de la mascota
         return animalGenderId;
     }
 
@@ -150,6 +171,7 @@ public class PetDTO {
      * @param animalGenderId El identificador del género de la mascota a establecer.
      */
     public void setAnimalGenderId(int animalGenderId) {
+        // Bloque setter para establecer el identificador del género de la mascota
         this.animalGenderId = animalGenderId;
     }
 
@@ -159,6 +181,7 @@ public class PetDTO {
      * @return El identificador del plan familiar.
      */
     public int getFamilyPlanId() {
+        // Bloque getter para obtener el identificador del plan familiar asociado a la mascota
         return familyPlanId;
     }
 
@@ -168,6 +191,7 @@ public class PetDTO {
      * @param familyPlanId El identificador del plan familiar a establecer.
      */
     public void setFamilyPlanId(int familyPlanId) {
+        // Bloque setter para establecer el identificador del plan familiar asociado a la mascota
         this.familyPlanId = familyPlanId;
     }
 
@@ -177,6 +201,7 @@ public class PetDTO {
      * @return La edad de la mascota.
      */
     public int getAge() {
+        // Bloque getter para obtener la edad de la mascota
         return age;
     }
 
@@ -186,6 +211,7 @@ public class PetDTO {
      * @param age La edad a establecer.
      */
     public void setAge(int age) {
+        // Bloque setter para establecer la edad de la mascota
         this.age = age;
     }
 }

@@ -30,13 +30,16 @@ public class NotificationServlet extends HttpServlet {
      */
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        // Establecer el tipo de contenido y la codificación de caracteres a la respuesta
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
 
+        // Obtener la información de ruta adicional de la petición HTTP
         String pathInfo = req.getPathInfo();
 
+        // Condicional: Validar si la ruta contiene la petición para contar las notificaciones no leídas
         if (pathInfo != null && pathInfo.contains("/count/")) {
-            // GET /api/notifications/user/count/{userId}
+            // Bloque: Responder con conteo de notificaciones no leídas (simulado en 0)
             resp.getWriter().write("""
                     {
                         "data": {
@@ -44,8 +47,10 @@ public class NotificationServlet extends HttpServlet {
                         }
                     }
                     """);
-        } else {
-            // GET /api/notifications/user/{userId} o general
+        } 
+        // Condicional: En caso de solicitar la lista completa de notificaciones o cualquier otra ruta
+        else {
+            // Bloque: Responder con una lista vacía de notificaciones (simulado)
             resp.getWriter().write("""
                     {
                         "data": []

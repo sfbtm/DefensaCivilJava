@@ -31,8 +31,10 @@ public class TestServlet extends HttpServlet {
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
+        // Establecer el tipo de contenido de la respuesta HTTP a JSON
         resp.setContentType("application/json");
 
+        // Bloque: Escribir la respuesta JSON de prueba que indica el estado del backend
         resp.getWriter().write("""
                 {
                     "data": "Backend funcionando"

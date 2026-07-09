@@ -6,15 +6,20 @@ package com.defensacivil.dto;
  * y el identificador de la mascota asociada.
  */
 public class VaccineDTO {
+    // Identificador único del registro de la vacuna en la base de datos
     private int id;
+    // Nombre de la vacuna (ej. Antirrábica, Triple Felina)
     private String name;
+    // Fecha de aplicación de la vacuna en formato AAAA-MM-DD
     private String date;
+    // Identificador de la mascota a la que se le administró la vacuna
     private Integer pet_id;
 
     /**
      * Constructor por defecto de VaccineDTO.
      */
     public VaccineDTO() {
+        // Bloque del constructor por defecto de VaccineDTO
     }
 
     /**
@@ -26,6 +31,7 @@ public class VaccineDTO {
      * @param pet_id Identificador de la mascota que recibió la vacuna.
      */
     public VaccineDTO(int id, String name, String date, Integer pet_id) {
+        // Bloque del constructor parametrizado de VaccineDTO: inicializar los atributos del registro de vacuna
         this.id = id;
         this.name = name;
         this.date = date;
@@ -38,6 +44,7 @@ public class VaccineDTO {
      * @return El identificador de la vacuna.
      */
     public int getId() {
+        // Bloque getter para obtener el identificador de la vacuna
         return id;
     }
 
@@ -47,6 +54,7 @@ public class VaccineDTO {
      * @param id El identificador único a establecer.
      */
     public void setId(int id) {
+        // Bloque setter para establecer el identificador de la vacuna
         this.id = id;
     }
 
@@ -56,6 +64,7 @@ public class VaccineDTO {
      * @return El nombre de la vacuna.
      */
     public String getName() {
+        // Bloque getter para obtener el nombre de la vacuna
         return name;
     }
 
@@ -65,6 +74,7 @@ public class VaccineDTO {
      * @param name El nombre de la vacuna a establecer.
      */
     public void setName(String name) {
+        // Bloque setter para establecer el nombre de la vacuna
         this.name = name;
     }
 
@@ -74,6 +84,7 @@ public class VaccineDTO {
      * @return La fecha de aplicación.
      */
     public String getDate() {
+        // Bloque getter para obtener la fecha de aplicación de la vacuna
         return date;
     }
 
@@ -83,6 +94,7 @@ public class VaccineDTO {
      * @param date La fecha de aplicación a establecer.
      */
     public void setDate(String date) {
+        // Bloque setter para establecer la fecha de aplicación de la vacuna
         this.date = date;
     }
 
@@ -92,6 +104,7 @@ public class VaccineDTO {
      * @return El identificador de la mascota.
      */
     public Integer getPet_id() {
+        // Bloque getter para obtener el identificador de la mascota asociada a la vacuna
         return pet_id;
     }
 
@@ -101,6 +114,7 @@ public class VaccineDTO {
      * @param pet_id El identificador de la mascota a establecer.
      */
     public void setPet_id(Integer pet_id) {
+        // Bloque setter para establecer el identificador de la mascota asociada a la vacuna
         this.pet_id = pet_id;
     }
 }

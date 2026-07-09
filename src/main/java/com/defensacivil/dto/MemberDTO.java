@@ -5,23 +5,36 @@ package com.defensacivil.dto;
  * Contiene información personal detallada, de identificación, de contacto y médica del miembro.
  */
 public class MemberDTO {
+    // Identificador único del miembro de la familia
     private int id;
+    // Nombres del integrante familiar
     private String names;
+    // Apellidos del integrante familiar
     private String lastNames;
+    // Parentesco o rol del integrante en la familia (ej. Padre, Hijo)
     private String relationship;
+    // Número telefónico de contacto
     private String phone;
+    // ID correspondiente al género del integrante (tabla Genero)
     private int genderId;
+    // ID correspondiente al tipo de documento de identidad (tabla DocumentoTipo)
     private int documentTypeId;
+    // ID correspondiente a la nacionalidad (tabla Nacionalidad)
     private int nationalityId;
+    // ID correspondiente al grupo sanguíneo (almacenado virtualmente)
     private int bloodGroupId;
+    // Nombre de la entidad promotora de salud (EPS) del miembro
     private String eps;
+    // Fecha de nacimiento del integrante en formato AAAA-MM-DD
     private String birthDate;
+    // Número del documento de identidad
     private String documentNumber;
 
     /**
      * Constructor por defecto de MemberDTO.
      */
     public MemberDTO() {
+        // Bloque del constructor por defecto de MemberDTO
     }
 
     /**
@@ -43,6 +56,7 @@ public class MemberDTO {
     public MemberDTO(int id, String names, String lastNames, String relationship, String phone, int genderId,
                      int documentTypeId, int nationalityId, int bloodGroupId, String eps, String birthDate,
                      String documentNumber) {
+        // Bloque del constructor parametrizado de MemberDTO: inicializar todos los atributos del miembro familiar
         this.id = id;
         this.names = names;
         this.lastNames = lastNames;
@@ -63,6 +77,7 @@ public class MemberDTO {
      * @return El identificador único.
      */
     public int getId() {
+        // Bloque getter para obtener el identificador del miembro
         return id;
     }
 
@@ -72,6 +87,7 @@ public class MemberDTO {
      * @param id El identificador único a establecer.
      */
     public void setId(int id) {
+        // Bloque setter para establecer el identificador del miembro
         this.id = id;
     }
 
@@ -81,6 +97,7 @@ public class MemberDTO {
      * @return Los nombres del miembro.
      */
     public String getNames() {
+        // Bloque getter para obtener los nombres del miembro
         return names;
     }
 
@@ -90,6 +107,7 @@ public class MemberDTO {
      * @param names Los nombres a establecer.
      */
     public void setNames(String names) {
+        // Bloque setter para establecer los nombres del miembro
         this.names = names;
     }
 
@@ -99,6 +117,7 @@ public class MemberDTO {
      * @return Los apellidos del miembro.
      */
     public String getLastNames() {
+        // Bloque getter para obtener los apellidos del miembro
         return lastNames;
     }
 
@@ -108,6 +127,7 @@ public class MemberDTO {
      * @param lastNames Los apellidos a establecer.
      */
     public void setLastNames(String lastNames) {
+        // Bloque setter para establecer los apellidos del miembro
         this.lastNames = lastNames;
     }
 
@@ -117,6 +137,7 @@ public class MemberDTO {
      * @return El parentesco del miembro.
      */
     public String getRelationship() {
+        // Bloque getter para obtener el parentesco o relación familiar del miembro
         return relationship;
     }
 
@@ -126,6 +147,7 @@ public class MemberDTO {
      * @param relationship El parentesco a establecer.
      */
     public void setRelationship(String relationship) {
+        // Bloque setter para establecer el parentesco o relación familiar del miembro
         this.relationship = relationship;
     }
 
@@ -135,6 +157,7 @@ public class MemberDTO {
      * @return El número de teléfono.
      */
     public String getPhone() {
+        // Bloque getter para obtener el número de teléfono del miembro
         return phone;
     }
 
@@ -144,6 +167,7 @@ public class MemberDTO {
      * @param phone El número de teléfono a establecer.
      */
     public void setPhone(String phone) {
+        // Bloque setter para establecer el número de teléfono del miembro
         this.phone = phone;
     }
 
@@ -153,6 +177,7 @@ public class MemberDTO {
      * @return El identificador del género.
      */
     public int getGenderId() {
+        // Bloque getter para obtener el identificador del género del miembro
         return genderId;
     }
 
@@ -162,6 +187,7 @@ public class MemberDTO {
      * @param genderId El identificador del género a establecer.
      */
     public void setGenderId(int genderId) {
+        // Bloque setter para establecer el identificador del género del miembro
         this.genderId = genderId;
     }
 
@@ -171,6 +197,7 @@ public class MemberDTO {
      * @return El identificador del tipo de documento.
      */
     public int getDocumentTypeId() {
+        // Bloque getter para obtener el identificador del tipo de documento de identidad
         return documentTypeId;
     }
 
@@ -180,6 +207,7 @@ public class MemberDTO {
      * @param documentTypeId El identificador del tipo de documento a establecer.
      */
     public void setDocumentTypeId(int documentTypeId) {
+        // Bloque setter para establecer el identificador del tipo de documento de identidad
         this.documentTypeId = documentTypeId;
     }
 
@@ -189,6 +217,7 @@ public class MemberDTO {
      * @return El identificador de la nacionalidad.
      */
     public int getNationalityId() {
+        // Bloque getter para obtener el identificador de la nacionalidad del miembro
         return nationalityId;
     }
 
@@ -198,6 +227,7 @@ public class MemberDTO {
      * @param nationalityId El identificador de la nacionalidad a establecer.
      */
     public void setNationalityId(int nationalityId) {
+        // Bloque setter para establecer el identificador de la nacionalidad del miembro
         this.nationalityId = nationalityId;
     }
 
@@ -207,6 +237,7 @@ public class MemberDTO {
      * @return El identificador del grupo sanguíneo.
      */
     public int getBloodGroupId() {
+        // Bloque getter para obtener el identificador del grupo sanguíneo del miembro
         return bloodGroupId;
     }
 
@@ -216,6 +247,7 @@ public class MemberDTO {
      * @param bloodGroupId El identificador del grupo sanguíneo a establecer.
      */
     public void setBloodGroupId(int bloodGroupId) {
+        // Bloque setter para establecer el identificador del grupo sanguíneo del miembro
         this.bloodGroupId = bloodGroupId;
     }
 
@@ -225,6 +257,7 @@ public class MemberDTO {
      * @return El nombre de la EPS.
      */
     public String getEps() {
+        // Bloque getter para obtener el nombre de la EPS del miembro
         return eps;
     }
 
@@ -234,6 +267,7 @@ public class MemberDTO {
      * @param eps El nombre de la EPS a establecer.
      */
     public void setEps(String eps) {
+        // Bloque setter para establecer la EPS del miembro
         this.eps = eps;
     }
 
@@ -243,6 +277,7 @@ public class MemberDTO {
      * @return La fecha de nacimiento.
      */
     public String getBirthDate() {
+        // Bloque getter para obtener la fecha de nacimiento del miembro
         return birthDate;
     }
 
@@ -252,6 +287,7 @@ public class MemberDTO {
      * @param birthDate La fecha de nacimiento a establecer.
      */
     public void setBirthDate(String birthDate) {
+        // Bloque setter para establecer la fecha de nacimiento del miembro
         this.birthDate = birthDate;
     }
 
@@ -261,6 +297,7 @@ public class MemberDTO {
      * @return El número de documento.
      */
     public String getDocumentNumber() {
+        // Bloque getter para obtener el número de documento de identidad del miembro
         return documentNumber;
     }
 
@@ -270,6 +307,7 @@ public class MemberDTO {
      * @param documentNumber El número de documento a establecer.
      */
     public void setDocumentNumber(String documentNumber) {
+        // Bloque setter para establecer el número de documento de identidad del miembro
         this.documentNumber = documentNumber;
     }
 }

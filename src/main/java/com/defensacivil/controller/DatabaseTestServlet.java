@@ -36,8 +36,10 @@ public class DatabaseTestServlet extends HttpServlet {
 
         resp.setContentType("application/json");
 
+        // Bloque try-with-resources para obtener y cerrar automáticamente la conexión a la base de datos
         try (Connection conn = DatabaseConfig.getConnection()) {
 
+            // Bloque ejecutado si la conexión se establece exitosamente sin lanzar excepciones
             resp.getWriter().write("""
                     {
                         "data": "Conexion exitosa"
@@ -46,14 +48,17 @@ public class DatabaseTestServlet extends HttpServlet {
 
         } catch (Exception e) {
 
+            // Bloque catch ejecutado en caso de fallo de conexión o error SQL
             resp.setStatus(500);
 
+            // Responder con un mensaje JSON de error
             resp.getWriter().write("""
                     {
                         "error": "Error de conexion"
                     }
                     """);
 
+            // Imprimir la traza de la excepción para facilitar el diagnóstico en los logs
             e.printStackTrace();
         }
     }

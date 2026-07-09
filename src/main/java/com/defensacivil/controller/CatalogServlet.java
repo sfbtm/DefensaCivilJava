@@ -38,6 +38,9 @@ import java.util.Map;
 })
 public class CatalogServlet extends HttpServlet {
 
+    /**
+     * Instancia de Gson utilizada para convertir colecciones y mapas Java a su representación en formato JSON.
+     */
     private final Gson gson = new Gson();
 
     /**
@@ -69,8 +72,11 @@ public class CatalogServlet extends HttpServlet {
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
 
+        // Bloque try para controlar y procesar excepciones imprevistas al responder solicitudes GET
         try {
+            // Condicional para validar si se solicita el catálogo de estados de planes
             if (servletPath.contains("statusPlans")) {
+                // Bloque ejecutado para armar y retornar los estados de planes estáticos
                 List<Map<String, Object>> list = List.of(
                     Map.of("id", 1, "name", "Creado"),
                     Map.of("id", 3, "name", "En proceso"),
@@ -83,7 +89,9 @@ public class CatalogServlet extends HttpServlet {
                 return;
             }
 
+            // Condicional para validar si se solicita el catálogo de zonas geográficas
             if (servletPath.contains("zones")) {
+                // Bloque ejecutado para listar las zonas Urbana y Rural
                 List<Map<String, Object>> list = List.of(
                     Map.of("id", 1, "name", "Urbana"),
                     Map.of("id", 2, "name", "Rural")
@@ -92,12 +100,19 @@ public class CatalogServlet extends HttpServlet {
                 return;
             }
 
+            // Condicional para validar si se solicita el catálogo de ciudades
             if (servletPath.contains("cities")) {
+                // Condicional para verificar si la ruta incluye filtro de departamento
                 if (pathInfo != null && pathInfo.startsWith("/department/")) {
+                    // Bloque ejecutado si se filtra por departamento
                     int deptId = 1;
+                    // Bloque try para controlar errores al parsear el ID del departamento desde la ruta
                     try {
+                        // Intento de conversión a entero
                         deptId = Integer.parseInt(pathInfo.substring(12));
-                    } catch (NumberFormatException ignored) {}
+                    } catch (NumberFormatException ignored) {
+                        // Bloque catch vacío para omitir errores de formato y usar el valor por defecto
+                    }
                     
                     List<Map<String, Object>> list = List.of(
                         Map.of("id", 1, "name", "Medellín"),
@@ -106,6 +121,7 @@ public class CatalogServlet extends HttpServlet {
                     );
                     resp.getWriter().write(gson.toJson(Map.of("data", list)));
                 } else {
+                    // Bloque ejecutado si se solicitan todas las ciudades sin filtro específico
                     List<Map<String, Object>> list = List.of(
                         Map.of("id", 1, "name", "Medellín"),
                         Map.of("id", 2, "name", "Bello"),
@@ -116,9 +132,13 @@ public class CatalogServlet extends HttpServlet {
                 return;
             }
 
+            // Condicional para validar si la solicitud apunta al recurso de parentescos (kinships)
             if (servletPath.contains("kinships")) {
+                // Condicional para determinar si se consulta un parentesco particular por su ID
                 if (pathInfo != null && !pathInfo.equals("/")) {
+                    // Bloque ejecutado cuando se suministra un ID en la ruta
                     int id = Integer.parseInt(pathInfo.substring(1));
+                    // Sentencia switch condicional para retornar el nombre del parentesco correspondiente
                     String name = switch (id) {
                         case 1 -> "Padre";
                         case 2 -> "Madre";
@@ -127,6 +147,7 @@ public class CatalogServlet extends HttpServlet {
                     };
                     resp.getWriter().write(gson.toJson(Map.of("data", Map.of("id", id, "name", name))));
                 } else {
+                    // Bloque ejecutado para listar todas las opciones de parentesco disponibles
                     List<Map<String, Object>> list = List.of(
                         Map.of("id", 1, "name", "Padre"),
                         Map.of("id", 2, "name", "Madre"),
@@ -138,9 +159,13 @@ public class CatalogServlet extends HttpServlet {
                 return;
             }
 
+            // Condicional para validar si la solicitud apunta al recurso de grupos sanguíneos
             if (servletPath.contains("bloodGroups")) {
+                // Condicional para verificar si se consulta un grupo sanguíneo específico
                 if (pathInfo != null && !pathInfo.equals("/")) {
+                    // Bloque ejecutado si se especifica el ID del grupo sanguíneo
                     int id = Integer.parseInt(pathInfo.substring(1));
+                    // Expresión switch condicional para mapear el ID al tipo de sangre
                     String name = switch (id) {
                         case 1 -> "O+";
                         case 2 -> "O-";
@@ -154,6 +179,7 @@ public class CatalogServlet extends HttpServlet {
                     };
                     resp.getWriter().write(gson.toJson(Map.of("data", Map.of("id", id, "name", name))));
                 } else {
+                    // Bloque ejecutado para retornar el catálogo completo de tipos de sangre
                     List<Map<String, Object>> list = List.of(
                         Map.of("id", 1, "name", "O+"),
                         Map.of("id", 2, "name", "O-"),
@@ -169,29 +195,41 @@ public class CatalogServlet extends HttpServlet {
                 return;
             }
 
+            // Condicional para verificar si la ruta es sobre géneros de animales
             if (servletPath.contains("animalGenders")) {
+                // Condicional para consultar el género de una mascota guardada en BD
                 if (pathInfo != null && pathInfo.startsWith("/pet/")) {
+                    // Bloque ejecutado al consultar el género de una mascota por su petId
                     int petId = Integer.parseInt(pathInfo.substring(5));
                     String sql = "SELECT m.IdGenero, g.Nombre AS GeneroNombre FROM Mascotas m LEFT JOIN Genero g ON m.IdGenero = g.IdGenero WHERE m.IdMascota = ?";
                     Map<String, Object> gender = Map.of("id", 1, "name", "Macho");
+                    // Bloque try-with-resources para asegurar el cierre automático de la conexión y el statement de SQL
                     try (Connection conn = DatabaseConfig.getConnection();
                          PreparedStatement ps = conn.prepareStatement(sql)) {
                         ps.setInt(1, petId);
+                        // Bloque try-with-resources interno para cerrar el conjunto de resultados ResultSet
                         try (ResultSet rs = ps.executeQuery()) {
+                            // Condicional para validar si la consulta SQL retornó algún registro
                             if (rs.next()) {
+                                // Bloque ejecutado para leer el género desde el registro de la BD
                                 int genderId = rs.getInt("IdGenero");
                                 String genderName = rs.getString("GeneroNombre");
+                                // Condicional/Ternario para definir el nombre de género por defecto en caso de nulidad
                                 gender = Map.of("id", genderId, "name", genderName != null ? genderName : "Macho");
                             }
                         }
                     }
                     resp.getWriter().write(gson.toJson(Map.of("data", gender)));
                     return;
+                // Condicional para verificar si se consulta un género de animal individual por ID (estático)
                 } else if (pathInfo != null && !pathInfo.equals("/")) {
+                    // Bloque ejecutado al consultar un género por ID (1 o 2)
                     int id = Integer.parseInt(pathInfo.substring(1));
+                    // Operador condicional ternario para decidir entre Macho y Hembra
                     String name = (id == 1) ? "Macho" : "Hembra";
                     resp.getWriter().write(gson.toJson(Map.of("data", Map.of("id", id, "name", name))));
                 } else {
+                    // Bloque por defecto que lista todos los géneros de animales
                     List<Map<String, Object>> list = List.of(
                         Map.of("id", 1, "name", "Macho"),
                         Map.of("id", 2, "name", "Hembra")
@@ -201,8 +239,10 @@ public class CatalogServlet extends HttpServlet {
                 return;
             }
 
+            // Envía un error 400 Bad Request si la ruta solicitada no coincide con ningún catálogo
             ResponseUtil.sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "Ruta de catálogo no soportada");
         } catch (Exception e) {
+            // Bloque catch para capturar cualquier falla imprevista durante la serialización o conexión
             ResponseUtil.sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
         }
     }
