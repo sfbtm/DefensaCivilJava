@@ -548,6 +548,7 @@ public class UserServlet extends HttpServlet {
             // Bloque try para parsear el ID del usuario de la ruta
             try {
                 int id = Integer.parseInt(pathInfo.substring(1));
+                // Trae la informacion del usuario conectada con las tablas maestras para así no mostrar un ID en el frontend si no el valor del ID
                 String sql = """
                         SELECT 
                             u.IdUsuario, u.Nombre, u.Documento, u.Email, u.Telefono, u.FechaNacimiento, u.Activo, u.IdRol,
@@ -572,7 +573,6 @@ public class UserServlet extends HttpServlet {
                     ps.setInt(1, id);
                     // Try-with-resources: Ejecutar y procesar ResultSet
                     try (ResultSet rs = ps.executeQuery()) {
-                        // Condicional: Si el usuario existe en la base de datos
                         if (rs.next()) {
                             int activeVal = rs.getInt("Activo");
                             Map<String, Object> user = new HashMap<>();

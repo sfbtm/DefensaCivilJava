@@ -92,7 +92,7 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         
         // Consulta SQL para traer los detalles de los factores de riesgo filtrando por plan familiar
         String sql = """
-            SELECT f.IdFactorRiesgo, f.IdTipoAmenaza, f.Ubicacion, f.AccionReduccion, t.Nombre AS AmenazaNombre
+            SELECT f.IdFactorRiesgo, f.IdTipoAmenaza, f.Ubicacion, f.AccionReduccion, f.Distancia, t.Nombre AS AmenazaNombre
             FROM FactorRiesgo f
             JOIN TipoAmenaza t ON f.IdTipoAmenaza = t.IdTipoAmenaza
             WHERE f.IdPlanFamiliar = ?
@@ -122,10 +122,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
                     risk.put("threat_type", Map.of("id", rs.getInt("IdTipoAmenaza"), "name", amenazaNombre));
                     risk.put("ubication", rs.getString("Ubicacion"));
 
-                    // Recuperar campos complementarios (ej. descripción, distancia) no persistidos físicamente en la BD
-                    Map<String, Object> extra = extraData.getOrDefault("risk_" + riskId, Map.of());
-                    risk.put("description", extra.getOrDefault("description", rs.getString("AccionReduccion") != null ? rs.getString("AccionReduccion") : ""));
-                    risk.put("distance", extra.getOrDefault("distance", ""));
+                    // Recuperar campos complementarios directamente persistidos físicamente en la BD
+                    risk.put("description", rs.getString("AccionReduccion") != null ? rs.getString("AccionReduccion") : "");
+                    Object distanceVal = rs.getObject("Distancia");
+                    risk.put("distance", distanceVal != null ? distanceVal : "");
                     risk.put("family_plan_id", planId);
                     
                     // Añadir el mapa estructurado a la lista final
@@ -149,7 +149,7 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
     public Map<String, Object> getRiskFactorById(int riskId) throws SQLException {
         // Consulta SQL con JOIN para buscar un factor de riesgo por su clave primaria
         String sql = """
-            SELECT f.IdFactorRiesgo, f.IdTipoAmenaza, f.Ubicacion, f.AccionReduccion, t.Nombre AS AmenazaNombre
+            SELECT f.IdFactorRiesgo, f.IdTipoAmenaza, f.Ubicacion, f.AccionReduccion, f.Distancia, t.Nombre AS AmenazaNombre
             FROM FactorRiesgo f
             JOIN TipoAmenaza t ON f.IdTipoAmenaza = t.IdTipoAmenaza
             WHERE f.IdFactorRiesgo = ?
@@ -178,10 +178,10 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
                     risk.put("threat_type", Map.of("id", rs.getInt("IdTipoAmenaza"), "name", amenazaNombre));
                     risk.put("ubication", rs.getString("Ubicacion"));
 
-                    // Combinar con la información en memoria caché
-                    Map<String, Object> extra = extraData.getOrDefault("risk_" + riskId, Map.of());
-                    risk.put("description", extra.getOrDefault("description", rs.getString("AccionReduccion") != null ? rs.getString("AccionReduccion") : ""));
-                    risk.put("distance", extra.getOrDefault("distance", ""));
+                    // Recuperar campos complementarios directamente de la BD
+                    risk.put("description", rs.getString("AccionReduccion") != null ? rs.getString("AccionReduccion") : "");
+                    Object distanceVal = rs.getObject("Distancia");
+                    risk.put("distance", distanceVal != null ? distanceVal : "");
                 }
             }
         }
@@ -260,7 +260,12 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         String description = (String) body.get("description");
         
         // Obtener la distancia
-        String distanceStr = body.get("distance") != null ? String.valueOf(body.get("distance")) : "";
+        Float distance = null;
+        if (body.get("distance") != null) {
+            try {
+                distance = Float.parseFloat(String.valueOf(body.get("distance")));
+            } catch (NumberFormatException ignored) {}
+        }
 
         Object planIdObj = body.get("family_plan_id");
         int planId = 1;
@@ -276,7 +281,7 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         String accionReduccion = description != null && !description.isEmpty() ? description : "Sin descripción";
 
         // Sentencia SQL parametrizada de inserción
-        String sql = "INSERT INTO FactorRiesgo (IdPlanFamiliar, IdTipoAmenaza, Ubicacion, AccionReduccion) VALUES (?, ?, ?, ?)";
+        String sql = "INSERT INTO FactorRiesgo (IdPlanFamiliar, IdTipoAmenaza, Ubicacion, AccionReduccion, Distancia) VALUES (?, ?, ?, ?, ?)";
         
         // Abrir conexión y preparar la inserción indicando retorno de llaves generadas
         try (Connection conn = DatabaseConfig.getConnection();
@@ -287,6 +292,11 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
             ps.setInt(2, threatId);
             ps.setString(3, ubicacion != null ? ubicacion : "");
             ps.setString(4, accionReduccion);
+            if (distance != null) {
+                ps.setFloat(5, distance);
+            } else {
+                ps.setNull(5, java.sql.Types.FLOAT);
+            }
             
             // Ejecutar la inserción física
             ps.executeUpdate();
@@ -299,16 +309,6 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
                 if (rs.next()) {
                     generatedId = rs.getInt(1);
                 }
-            }
-            
-            // Si se obtuvo una clave primaria generada válida, guardar los campos complementarios en la memoria caché
-            if (generatedId > 0) {
-                Map<String, Object> extra = new HashMap<>();
-                extra.put("description", description != null ? description : "");
-                extra.put("distance", distanceStr);
-                
-                // Almacenar en la caché
-                extraData.put("risk_" + generatedId, extra);
             }
             
             // Retornar el identificador autogenerado
@@ -342,14 +342,20 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
         String description = (String) body.get("description");
         
         // Obtener distancia
-        String distanceStr = body.get("distance") != null ? String.valueOf(body.get("distance")) : "";
+        Float distance = null;
+        if (body.get("distance") != null) {
+            try {
+                distance = Float.parseFloat(String.valueOf(body.get("distance")));
+            } catch (NumberFormatException ignored) {}
+        }
 
         // Asignar descripción por defecto
         String accionReduccion = description != null && !description.isEmpty() ? description : "Sin descripción";
 
         // Sentencia SQL de actualización parametrizada
-        String sql = "UPDATE FactorRiesgo SET IdTipoAmenaza = ?, Ubicacion = ?, AccionReduccion = ? WHERE IdFactorRiesgo = ?";
+        String sql = "UPDATE FactorRiesgo SET IdTipoAmenaza = ?, Ubicacion = ?, AccionReduccion = ?, Distancia = ? WHERE IdFactorRiesgo = ?";
         
+        boolean success = false;
         // Abrir conexión y preparar la actualización
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -358,24 +364,18 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
             ps.setInt(1, threatId);
             ps.setString(2, ubicacion != null ? ubicacion : "");
             ps.setString(3, accionReduccion);
-            ps.setInt(4, riskId);
+            if (distance != null) {
+                ps.setFloat(4, distance);
+            } else {
+                ps.setNull(4, java.sql.Types.FLOAT);
+            }
+            ps.setInt(5, riskId);
             
             // Ejecutar la actualización
-            int rows = ps.executeUpdate();
-            
-            // Si la base de datos modificó registros
-            if (rows > 0) {
-                // Obtener o inicializar la entrada en la memoria caché para este factor de riesgo
-                Map<String, Object> extra = extraData.computeIfAbsent("risk_" + riskId, k -> new HashMap<>());
-                extra.put("description", description != null ? description : "");
-                extra.put("distance", distanceStr);
-                
-                // Retornar verdadero indicando éxito
-                return true;
-            }
+            success = ps.executeUpdate() > 0;
         }
-        // Retornar falso en caso de no haber actualizado filas
-        return false;
+        // Retornar verdadero indicando éxito si afectó filas
+        return success;
     }
 
     /**
@@ -410,9 +410,6 @@ public class VulnerabilidadDAOImpl implements VulnerabilidadDAO {
                 
                 // Confirmar transacción al haberse ejecutado ambos borrados correctamente
                 conn.commit();
-                
-                // Remover el registro de la memoria caché
-                extraData.remove("risk_" + riskId);
                 
                 // Retornar verdadero si se borró al menos una fila del factor de riesgo principal
                 return affectedRows > 0;
